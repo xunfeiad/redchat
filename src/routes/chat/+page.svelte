@@ -112,11 +112,12 @@
           case "webrtc":
             console.log("---------------------");
             console.log("webrtc", message);
-            console.log(callType);
+            console.log((message.content as WebRTCContent).callType);
             console.log("---------------------");
             showIncomingCall = true;
             // todo
             callerName = (message.content as WebRTCContent).senderName || "未知用户";
+            callType = (message.content as WebRTCContent).callType;
             if(callType === "video"){
               await initWebRTC(true, true);
             }else{
@@ -270,7 +271,6 @@
 
   // 开始视频通话
   async function startVideoCall() {
-    callType = "video";
     if (!currentContact) return;
     await initWebRTC(true, true);
 
@@ -285,13 +285,13 @@
         receiverId: currentContact.id,
         senderName: userInfo?.nickname || userInfo?.username || "未知用户",
         sdp: offer.sdp,
+        callType: "video",
       },
     });
   }
 
   // 开始语音通话
   async function startVoiceCall() {
-    callType = "voice";
     if (!currentContact) return;
     await initWebRTC(false, true);
 
@@ -310,6 +310,7 @@
         receiverId: currentContact.id,
         senderName: userInfo?.nickname || userInfo?.username || "未知用户",
         sdp: offer.sdp,
+        callType: "voice",
       },
     });
   }

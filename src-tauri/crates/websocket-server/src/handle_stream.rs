@@ -44,7 +44,7 @@ pub async fn handle_message(text: ByteString, state: &AppState, mut session: Ses
                                 state.user_connections.find_session_and_send_message(Some(user_id), text_meesage_ref, None, None).await?;
                             }
                         },
-                        Message::WebRTC(mut webrtc_message) => {
+                        Message::WebRTC(webrtc_message) => {
                             if !state.user_connections.is_auth(user_id).await {
                                 return Err(CusError::NoAuthorization);
                             }

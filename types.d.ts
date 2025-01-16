@@ -23,6 +23,7 @@ export interface AuthContent {
 export interface WebRTCContent {
     receiverId: number;
     senderName: string;
+    callType: "video" | "voice";
     sdp: string;
 }
 

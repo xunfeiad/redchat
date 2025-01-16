@@ -46,6 +46,7 @@ pub struct WebRTCMessage {
     pub group_id: Option<i32>,
     pub sender_name: Option<String>,
     pub sdp: String,
+    pub call_type: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
