@@ -177,7 +177,7 @@
   async function loadMessages(contactId: number) {
     console.log("loadMessages", contactId);
     const res: Response<Message[]> = await invoke("get_messages", {
-      userId: 1,
+      userId: userId,
       contactId: contactId,
     });
     console.log(res);

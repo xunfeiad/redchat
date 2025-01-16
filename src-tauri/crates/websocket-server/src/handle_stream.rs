@@ -2,7 +2,7 @@ use actix_ws::Session;
 use bytestring::ByteString;
 use crate::{Message, AppState};
 use sea_orm::prelude::*;
-use error::{Error as CusError, Result};
+use error::{Error as CusError, Response, Result};
 use anyhow::Context;
 pub async fn handle_message(text: ByteString, state: &AppState, mut session: Session, user_id: i32) -> Result<(), CusError> {
     let message_data: Message = serde_json::from_str(&text)?;
@@ -12,7 +12,7 @@ pub async fn handle_message(text: ByteString, state: &AppState, mut session: Ses
                                 .user_connections
                                 .add_session(auth_message.user_id, session.clone())
                                 .await;
-                            session.text("认证成功").await.context("认证失败")?;
+                            session.text(serde_json::to_string(&Response::success("认证成功")).unwrap()).await.context("认证失败")?;
                         }
                         Message::Text(text_message) => {
                             if !state.user_connections.is_auth(user_id).await {
