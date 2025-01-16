@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
-import type { UserId, WebSocketMessage, TextContent, AuthContent, WebRTCContent } from '../../../types';
-
+import type { UserId, WebSocketMessage, TextContent, AuthContent, WebRTCContent, UserInfo } from '../../../types';
+import {goto} from '$app/navigation';
 export const wsStatus = writable<'connecting' | 'open' | 'closed'>('closed');
 export const wsMessages = writable<WebSocketMessage<TextContent | AuthContent | WebRTCContent>>();
 
@@ -19,13 +19,19 @@ class WebSocketClient {
     this.url = url;
   }
 
-  connect(params?: Record<string, string>) {
+  connect() {
     try {
       let url = this.url;
-      if (params) {
-        const paramsString = new URLSearchParams(params).toString();
-        url = url + '?' + paramsString;
+      const userInfo: UserInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+      if(!userInfo.id){
+        goto('/login');
+        return;
       }
+      const params = {
+        userId: userInfo.id.toString(),
+      };
+      const paramsString = new URLSearchParams(params).toString();
+      url = url + '?' + paramsString;
       this.ws = new WebSocket(url);
       wsStatus.set('connecting');
 

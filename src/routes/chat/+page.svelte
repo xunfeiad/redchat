@@ -63,9 +63,10 @@
     console.log(wsClient);
     userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
     userId = userInfo?.id || 0;
+    
     localVideo = document.createElement("video");
     remoteVideo = document.createElement("video");
-    wsClient.connect({ userId: userId.toString() });
+    wsClient.connect();
     // 订阅 wsState 的变化
     wsStatus.subscribe((state) => {
       console.log("WebSocket state changed:", state);
@@ -108,6 +109,8 @@
           case "auth":
             const authUserId = (message.content as AuthContent).userId;
             contacts = contacts.map(contact => contact.id === authUserId ? { ...contact, online: true } : contact);
+
+
             break;
           case "webrtc":
             console.log("---------------------");
