@@ -10,7 +10,7 @@
     DisconnectContent,
     Message,
     Contact,
-    UserInfo,
+    UserInfo
   } from "../../../types";
   import audio from "$lib/assets/remind_audio.wav";
   import { wsClient, wsStatus, wsMessages } from "$lib/stores/websocket";
@@ -45,6 +45,7 @@
   let callerName = $state("");
   // 来电类型
   let callType: "voice" | "video" | null = $state(null);
+  // rtc约束
 
   const get_contacts = async () => {
     try {
@@ -52,7 +53,7 @@
         userId: userId,
       });
       contacts = [...res.data];
-      console.log("Contacts loaded:", contacts);
+      console.log("contacts received....:", contacts);
     } catch (error) {
       console.error("Failed to load contacts:", error);
       errorMessage = "加载联系人失败";
@@ -105,10 +106,8 @@
             break;
 
           case "auth":
-            userId = (message.content as AuthContent).userId;
-            contacts = contacts.map((contact) =>
-              contact.id === userId ? { ...contact, online: true } : contact,
-            );
+            const authUserId = (message.content as AuthContent).userId;
+            contacts = contacts.map(contact => contact.id === authUserId ? { ...contact, online: true } : contact);
             break;
           case "webrtc":
             console.log("---------------------");
@@ -117,18 +116,15 @@
             console.log("---------------------");
             showIncomingCall = true;
             // todo
-            callerName =
-              (message.content as WebRTCContent).senderName || "未知用户";
-            if (callType === "video") {
+            callerName = (message.content as WebRTCContent).senderName || "未知用户";
+            if(callType === "video"){
               await initWebRTC(true, true);
-            } else {
+            }else{
               await initWebRTC(false, true);
             }
 
-            let audioPlayer = document.getElementById(
-              "remoteContactRemind",
-            ) as HTMLAudioElement;
-            audioPlayer.addEventListener("ended", () => {
+            let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
+            audioPlayer.addEventListener('ended', () => {
               audioPlayer.currentTime = 0;
               audioPlayer.play();
             });
@@ -136,12 +132,11 @@
             break;
           case "disconnect":
             console.log("remote user disconnected.", message);
-            userId = (message.content as DisconnectContent).userId;
-            contacts = contacts.map((contact) =>
-              contact.id === userId ? { ...contact, online: false } : contact,
-            );
+            const disConnectUserId = (message.content as DisconnectContent).userId;
+            contacts = contacts.map(contact => contact.id === disConnectUserId ? { ...contact, online: false } : contact);
             break;
         }
+
       },
     );
     try {
@@ -321,18 +316,14 @@
 
   function handleRejectCall() {
     showIncomingCall = false;
-    let audioPlayer = document.getElementById(
-      "remoteContactRemind",
-    ) as HTMLAudioElement;
+    let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
     // 处理拒绝通话逻辑...
   }
-  function handleAcceptCall() {
+  function handleAcceptCall(){
     showIncomingCall = false;
-    let audioPlayer = document.getElementById(
-      "remoteContactRemind",
-    ) as HTMLAudioElement;
+    let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
   }
@@ -343,8 +334,7 @@
     peerConnection?.close();
   });
 </script>
-
-<audio id="remoteContactRemind" src={audio}></audio>
+<audio id="remoteContactRemind" src={audio} ></audio>
 
 <div class="chat-container">
   <!-- 联系人列表 -->
@@ -473,29 +463,27 @@
 </div>
 
 {#if showIncomingCall}
-  <div class="modal-backdrop">
-    <div class="incoming-call-modal">
-      <div class="call-avatar">
-        <i class="fas fa-{callType === 'voice' ? 'phone' : 'video'}"
-          >{callerName}</i
-        >
-      </div>
-      <div class="call-info">
-        <h3>{callerName}</h3>
-        <p>正在发起{callType === "voice" ? "语音" : "视频"}通话...</p>
-      </div>
-      <div class="call-actions">
-        <button class="reject-btn" onclick={handleRejectCall}>
-          <i class="fas fa-phone-slash"></i>
-          <span>拒绝</span>
-        </button>
-        <button class="accept-btn" onclick={handleAcceptCall}>
-          <i class="fas fa-phone"></i>
-          <span>接听</span>
-        </button>
-      </div>
+<div class="modal-backdrop">
+  <div class="incoming-call-modal">
+    <div class="call-avatar">
+      <i class="fas fa-{callType === 'voice' ? 'phone' : 'video'}" >{callerName}</i>
+    </div>
+    <div class="call-info">
+      <h3>{callerName}</h3>
+      <p>正在发起{callType === 'voice' ? '语音' : '视频'}通话...</p>
+    </div>
+    <div class="call-actions">
+      <button class="reject-btn" onclick={handleRejectCall}>
+        <i class="fas fa-phone-slash"></i>
+        <span>拒绝</span>
+      </button>
+      <button class="accept-btn" onclick={handleAcceptCall}>
+        <i class="fas fa-phone"></i>
+        <span>接听</span>
+      </button>
     </div>
   </div>
+</div>
 {/if}
 
 <style>
@@ -998,12 +986,12 @@
   }
 
   .accept-btn {
-    background: #4caf50;
+    background: #4CAF50;
     color: white;
   }
 
   .accept-btn:hover {
-    background: #43a047;
+    background: #43A047;
     transform: translateY(-2px);
   }
 
@@ -1018,12 +1006,8 @@
   }
 
   @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   @keyframes slideIn {
