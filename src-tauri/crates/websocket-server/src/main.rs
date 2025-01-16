@@ -106,7 +106,7 @@ async fn echo(
             match msg {
                 Ok(AggregatedMessage::Text(ref text)) => {
                     if let Err(e) = handle_message(text.clone(), &state, session.clone(), user_id).await {
-                        session.text(e.to_string()).await.unwrap();
+                        session.text(serde_json::to_string(&e).unwrap()).await.unwrap();
                     }
                 }
 
