@@ -135,7 +135,7 @@
     try {
       // 这里添加实际的消息发送逻辑
       const res: Response<object> = await invoke("send_message", {
-        userId: 1,
+        userId: userId,
         contactId: currentContact.id,
         message: messageInput,
       });
