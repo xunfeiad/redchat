@@ -63,8 +63,6 @@ pub async fn handle_message(text: ByteString, state: &AppState, mut session: Ses
                                 }
                             } else {
                                 let receiver_id = webrtc_message.receiver_id.context("接收者ID为空")?;
-                                let user_info = entity::user::Entity::find_by_id(user_id).one(&state.db).await?.context("用户不存在")?;
-                                webrtc_message.sender_name = user_info.nickname;
                                 state.user_connections.find_session_and_send_message(Some(receiver_id), &Message::WebRTC(webrtc_message), None, None).await?;
                             }
                         },

@@ -7,65 +7,44 @@
     TextContent,
     AuthContent,
     WebRTCContent,
-    DisconnectContent
+    DisconnectContent,
+    Message,
+    Contact,
+    UserInfo,
   } from "../../../types";
   import audio from "$lib/assets/remind_audio.wav";
   import { wsClient, wsStatus, wsMessages } from "$lib/stores/websocket";
   import { get } from "svelte/store";
-  // import { mediaDevices } from '@tauri-apps/api/window';
 
-  interface Message {
-    id?: number;
-    content: string;
-    type: "text" | "image" | "file";
-    isSelf: boolean;
-    timestamp: Date;
-    status: "sending" | "sent" | "failed";
-  }
-
-  interface Contact {
-    id: number;
-    name: string;
-    avatar: string;
-    lastMessage?: string;
-    unread: number;
-    lastMessageTime: Date;
-    online?: boolean;
-    groupId?: string;
-    groupName?: string;
-    groupAvatar?: string;
-    groupLastMessage?: string;
-    groupLastMessageTime?: Date;
-  }
-
-  let messages: Message[] = [];
-  let contacts: Contact[] = [];
-  let currentContact: Contact | null = null;
+  // 消息
+  let messages: Message[] = $state([]);
+  // 联系人
+  let contacts: Contact[] = $state([]);
+  // 当前联系人
+  let currentContact: Contact | null = $state(null);
   // 输入框
-  let messageInput = "";
-  let chatContainer: HTMLElement;
-  let errorMessage = "";
+  let messageInput = $state("");
+  let chatContainer: HTMLElement | null = $state(null);
+  let errorMessage = $state("");
 
   // WebRTC 相关状态
-  let localStream: MediaStream | null = null;
-  let remoteStream: MediaStream | null = null;
-  let peerConnection: RTCPeerConnection | null = null;
+  let localStream: MediaStream | null = $state(null);
+  let remoteStream: MediaStream | null = $state(null);
+  let peerConnection: RTCPeerConnection | null = $state(null);
 
   // 视频元素引用
   let localVideo: HTMLVideoElement | null = null;
   let remoteVideo: HTMLVideoElement | null = null;
-  let userInfo = localStorage.getItem("userInfo");
+  // 用户id
+  let userId: number = $state(0);
 
-  let showIncomingCall = false;
-  let callerName = "";
-  let callType: "voice" | "video" = "voice";
-
-  $: contacts;
-  $: localStream;
-  $: remoteStream;
-  $: peerConnection;
-  $: userInfo;
-  $: userId = userInfo && JSON.parse(userInfo).id;
+  let userInfo: UserInfo | null = $state(null);
+  // 是否显示来电
+  let showIncomingCall = $state(false);
+  // 来电用户名
+  let callerName = $state("");
+  // 来电类型
+  let callType: "voice" | "video" | null = $state(null);
 
   const get_contacts = async () => {
     try {
@@ -81,9 +60,11 @@
   };
   onMount(async () => {
     console.log(wsClient);
+    userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
+    userId = userInfo?.id || 0;
     localVideo = document.createElement("video");
     remoteVideo = document.createElement("video");
-    wsClient.connect({ userId: userId });
+    wsClient.connect({ userId: userId.toString() });
     // 订阅 wsState 的变化
     wsStatus.subscribe((state) => {
       console.log("WebSocket state changed:", state);
@@ -125,20 +106,29 @@
 
           case "auth":
             userId = (message.content as AuthContent).userId;
-            contacts = contacts.map(contact => contact.id === userId ? { ...contact, online: true } : contact);
+            contacts = contacts.map((contact) =>
+              contact.id === userId ? { ...contact, online: true } : contact,
+            );
             break;
           case "webrtc":
             console.log("---------------------");
             console.log("webrtc", message);
+            console.log(callType);
             console.log("---------------------");
             showIncomingCall = true;
             // todo
-            callerName = (message.content as WebRTCContent).senderName || "未知用户";
-            callType = "voice";
-            await initWebRTC();
+            callerName =
+              (message.content as WebRTCContent).senderName || "未知用户";
+            if (callType === "video") {
+              await initWebRTC(true, true);
+            } else {
+              await initWebRTC(false, true);
+            }
 
-            let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
-            audioPlayer.addEventListener('ended', () => {
+            let audioPlayer = document.getElementById(
+              "remoteContactRemind",
+            ) as HTMLAudioElement;
+            audioPlayer.addEventListener("ended", () => {
               audioPlayer.currentTime = 0;
               audioPlayer.play();
             });
@@ -147,10 +137,11 @@
           case "disconnect":
             console.log("remote user disconnected.", message);
             userId = (message.content as DisconnectContent).userId;
-            contacts = contacts.map(contact => contact.id === userId ? { ...contact, online: false } : contact);
+            contacts = contacts.map((contact) =>
+              contact.id === userId ? { ...contact, online: false } : contact,
+            );
             break;
         }
-
       },
     );
     try {
@@ -255,11 +246,11 @@
   }
 
   // 初始化 WebRTC
-  async function initWebRTC() {
+  async function initWebRTC(video: boolean, audio: boolean) {
     try {
       localStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video,
+        audio,
       });
       localVideo!.srcObject = localStream;
 
@@ -284,8 +275,9 @@
 
   // 开始视频通话
   async function startVideoCall() {
+    callType = "video";
     if (!currentContact) return;
-    await initWebRTC();
+    await initWebRTC(true, true);
 
     // 创建并发送 offer
     const offer = await peerConnection!.createOffer();
@@ -296,6 +288,7 @@
       type: "webrtc",
       content: {
         receiverId: currentContact.id,
+        senderName: userInfo?.nickname || userInfo?.username || "未知用户",
         sdp: offer.sdp,
       },
     });
@@ -303,8 +296,9 @@
 
   // 开始语音通话
   async function startVoiceCall() {
+    callType = "voice";
     if (!currentContact) return;
-    await initWebRTC();
+    await initWebRTC(false, true);
 
     // 关闭视频轨道
     localStream?.getVideoTracks().forEach((track) => (track.enabled = false));
@@ -312,58 +306,35 @@
     // 创建并发送 offer
     const offer = await peerConnection!.createOffer();
     await peerConnection!.setLocalDescription(offer);
-
+    console.log("----------voice-------");
+    console.log(userInfo);
+    console.log("---------voice--------");
     wsClient.send({
       type: "webrtc",
       content: {
         receiverId: currentContact.id,
+        senderName: userInfo?.nickname || userInfo?.username || "未知用户",
         sdp: offer.sdp,
       },
     });
   }
 
-  // 处理 WebSocket 消息
-  // wsClient.onMessage = async (message) => {
-  //   const data = JSON.parse(message);
-
-  //   if (data.type === 'webrtc') {
-  //     const { type, sdp } = data.content;
-
-  //     if (type === 'offer') {
-  //       await initWebRTC();
-  //       await peerConnection!.setRemoteDescription(new RTCSessionDescription(sdp));
-
-  //       const answer = await peerConnection!.createAnswer();
-  //       await peerConnection!.setLocalDescription(answer);
-
-  //       wsClient.send({
-  //         type: 'webrtc',
-  //         content: {
-  //           type: 'answer',
-  //           receiverId: data.senderId,
-  //           sdp: answer
-  //         }
-  //       });
-  //     } else if (type === 'answer') {
-  //       await peerConnection!.setRemoteDescription(new RTCSessionDescription(sdp));
-  //     }
-  //   }
-  // };
-
-  function handleAcceptCall() {
-    showIncomingCall = false;
-    let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
-    audioPlayer.pause();
-    audioPlayer.currentTime = 0;
-    // 处理接受通话逻辑...
-  }
-
   function handleRejectCall() {
     showIncomingCall = false;
-    let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
+    let audioPlayer = document.getElementById(
+      "remoteContactRemind",
+    ) as HTMLAudioElement;
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
     // 处理拒绝通话逻辑...
+  }
+  function handleAcceptCall() {
+    showIncomingCall = false;
+    let audioPlayer = document.getElementById(
+      "remoteContactRemind",
+    ) as HTMLAudioElement;
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
   }
 
   onDestroy(() => {
@@ -372,7 +343,8 @@
     peerConnection?.close();
   });
 </script>
-<audio id="remoteContactRemind" src={audio} ></audio>
+
+<audio id="remoteContactRemind" src={audio}></audio>
 
 <div class="chat-container">
   <!-- 联系人列表 -->
@@ -387,7 +359,7 @@
         <div
           class="contact-item"
           class:active={currentContact?.id === contact.id}
-          on:click={() => selectContact(contact)}
+          onclick={() => selectContact(contact)}
         >
           <div class="avatar">
             {#if contact.avatar?.startsWith("http") || contact.avatar?.startsWith("data:image/")}
@@ -445,14 +417,14 @@
         <div class="call-actions">
           <button
             class="call-btn voice"
-            on:click={startVoiceCall}
+            onclick={startVoiceCall}
             title="语音通话"
           >
             <i class="fas fa-phone">语音通话</i>
           </button>
           <button
             class="call-btn video"
-            on:click={startVideoCall}
+            onclick={startVideoCall}
             title="视频通话"
           >
             <i class="fas fa-video">视频通话</i>
@@ -486,11 +458,11 @@
       <div class="input-area">
         <textarea
           bind:value={messageInput}
-          on:keydown={handleKeydown}
+          onkeydown={handleKeydown}
           placeholder="输入消息..."
           rows="3"
         ></textarea>
-        <button on:click={sendMessage} disabled={!messageInput.trim()}>
+        <button onclick={sendMessage} disabled={!messageInput.trim()}>
           发送
         </button>
       </div>
@@ -501,27 +473,29 @@
 </div>
 
 {#if showIncomingCall}
-<div class="modal-backdrop">
-  <div class="incoming-call-modal">
-    <div class="call-avatar">
-      <i class="fas fa-{callType === 'voice' ? 'phone' : 'video'}" >{callerName}</i>
-    </div>
-    <div class="call-info">
-      <h3>{callerName}</h3>
-      <p>正在发起{callType === 'voice' ? '语音' : '视频'}通话...</p>
-    </div>
-    <div class="call-actions">
-      <button class="reject-btn" on:click={handleRejectCall}>
-        <i class="fas fa-phone-slash"></i>
-        <span>拒绝</span>
-      </button>
-      <button class="accept-btn" on:click={handleAcceptCall}>
-        <i class="fas fa-phone"></i>
-        <span>接听</span>
-      </button>
+  <div class="modal-backdrop">
+    <div class="incoming-call-modal">
+      <div class="call-avatar">
+        <i class="fas fa-{callType === 'voice' ? 'phone' : 'video'}"
+          >{callerName}</i
+        >
+      </div>
+      <div class="call-info">
+        <h3>{callerName}</h3>
+        <p>正在发起{callType === "voice" ? "语音" : "视频"}通话...</p>
+      </div>
+      <div class="call-actions">
+        <button class="reject-btn" onclick={handleRejectCall}>
+          <i class="fas fa-phone-slash"></i>
+          <span>拒绝</span>
+        </button>
+        <button class="accept-btn" onclick={handleAcceptCall}>
+          <i class="fas fa-phone"></i>
+          <span>接听</span>
+        </button>
+      </div>
     </div>
   </div>
-</div>
 {/if}
 
 <style>
@@ -1024,12 +998,12 @@
   }
 
   .accept-btn {
-    background: #4CAF50;
+    background: #4caf50;
     color: white;
   }
 
   .accept-btn:hover {
-    background: #43A047;
+    background: #43a047;
     transform: translateY(-2px);
   }
 
@@ -1044,8 +1018,12 @@
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   @keyframes slideIn {
