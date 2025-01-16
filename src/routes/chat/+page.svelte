@@ -1,14 +1,13 @@
 <script lang="ts">
-  import { onMount, beforeUpdate, onDestroy } from "svelte";
-  import { goto } from "$app/navigation";
+  import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { get, writable } from "svelte/store";
-  import type { Response } from "../../../types";
-  import { wsClient, wsStatus } from "$lib/stores/websocket";
+  import type { Response, WebSocketMessage, TextContent} from "../../../types";
+  import { wsClient, wsStatus, wsMessages } from "$lib/stores/websocket";
+    import { get } from "svelte/store";
   // import { mediaDevices } from '@tauri-apps/api/window';
 
   interface Message {
-    id: number;
+    id?: number;
     content: string;
     type: "text" | "image" | "file";
     isSelf: boolean;
@@ -78,17 +77,29 @@
       console.log("WebSocket state changed:", state);
 
       if (state === "open") {
-        // 在 WebSocket 打开时发送认证消息
         const authMessage = {
           type: "auth",
           content: {
-            userId: userId, // 替换为实际用户 ID
-            // token: 'your-auth-token' // 替换为实际认证 token
+            userId: userId,
+            // token: 'your-auth-token'
           },
         };
 
         wsClient.send(authMessage);
         console.log("Authentication message sent:", authMessage);
+      }
+    });
+    wsMessages.subscribe((message: WebSocketMessage<TextContent>) => {
+      console.log("Received message:", message);
+      if(get(wsStatus) === 'open' && message.type === 'text'){
+        messages = [...messages, {
+          // id: message.content?.receiverId,
+          content: message.content?.message,
+          type: "text",
+          isSelf: false,
+          timestamp: new Date(),
+          status: "sent",
+        }]
       }
     });
     try {

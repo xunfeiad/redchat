@@ -16,3 +16,6 @@ sea-orm.workspace = true
 anyhow.workspace = true
 bytestring.workspace = true
 bincode = "1.3"
+log.workspace = true
+dotenv.workspace = true
+db.path = "../db"

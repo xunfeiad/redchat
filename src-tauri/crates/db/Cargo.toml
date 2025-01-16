@@ -1,0 +1,10 @@
+[package]
+name = "db"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+error.path = "../error"
+sea-orm.workspace = true
+log.workspace = true
+

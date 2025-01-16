@@ -3,17 +3,18 @@ pub mod handle_stream;
 use std::collections::HashMap;
 use actix_web::{rt, web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_ws::{AggregatedMessage, Session};
-use error::{Error as CusError, Response, Result};
+use error::{Error as CusError, Result};
 use futures_util::StreamExt as _;
 use handle_stream::handle_message;
 use sea_orm::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct AppState {
     pub db: DatabaseConnection,
-    pub user_connections: UserConnections,
+    pub user_connections: Arc<UserConnections>,
 }
 
 #[derive(Default)]
@@ -60,7 +61,7 @@ pub const TEXT_TYPE: &str = "text";
 
 
 impl UserConnections {
-    pub async fn new() -> Self {
+    pub fn new() -> Self {
         Self(RwLock::new(HashMap::new()))
     }
 
@@ -83,7 +84,11 @@ impl UserConnections {
         let map = self.0.read().await;
         map.contains_key(&user_id)
     }
-    
+
+    pub async fn get_session_ids(&self) -> Vec<UserId> {
+        let map = self.0.read().await;
+        map.keys().cloned().collect()
+    }
 }
 
 async fn echo(
@@ -134,9 +139,16 @@ async fn echo(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
+    dotenv::dotenv().ok();
+    
+    let user_connections = Arc::new(UserConnections::new());
+    let db = db::get_db().await.expect("error while connecting to database");
+    HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(AppState::default()))
+            .app_data(web::Data::new(AppState {
+                user_connections: user_connections.clone(),
+                db: db.clone(),
+            }))
             .route("/ws", web::get().to(echo))
     })
     .bind(("0.0.0.0", 8080))?

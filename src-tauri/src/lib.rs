@@ -17,24 +17,9 @@ pub fn run() -> Result<(), Error> {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     dotenv::dotenv().ok();
     env_logger::builder().init();
-    let database_url = std::env::var("DATABASE_URL").unwrap();
     let redis_url = std::env::var("REDIS_URL").unwrap();
     runtime.block_on(async {
-        let mut opt = ConnectOptions::new(database_url);
-        opt.max_connections(100)
-            .min_connections(5)
-            .connect_timeout(Duration::from_secs(8))
-            .acquire_timeout(Duration::from_secs(8))
-            .idle_timeout(Duration::from_secs(8))
-            .max_lifetime(Duration::from_secs(8))
-            .sqlx_logging(true)
-            .sqlx_logging_level(log::LevelFilter::Info)
-            .set_schema_search_path("my_schema"); // Setting default PostgreSQL schema
-
-        let db = Database::connect(opt)
-            .await
-            .expect("error while connecting to database");
-
+        let db = db::get_db().await.expect("error while connecting to database");
         let tera = Tera::new("templates/*.html").expect("can not find template.");
         let files = tera.get_template_names();
         log::error!("{:?}", files.collect::<Vec<_>>());

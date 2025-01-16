@@ -1,8 +1,8 @@
 import { writable } from 'svelte/store';
-import type { UserId } from '../../../types';
+import type { UserId, WebSocketMessage, TextContent, AuthContent, WebRTCContent } from '../../../types';
 
 export const wsStatus = writable<'connecting' | 'open' | 'closed'>('closed');
-export const wsMessages = writable<any[]>([]);
+export const wsMessages = writable<WebSocketMessage<TextContent>>();
 
 export interface WebSocketParams {
   userId: UserId;
@@ -11,14 +11,12 @@ export interface WebSocketParams {
 class WebSocketClient {
   private ws: WebSocket | null = null;
   private url: string;
-  private params?: Record<string, string>;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectTimeout = 3000;
 
-  constructor(url: string, params?: Record<string, string>) {
+  constructor(url: string) {
     this.url = url;
-    this.params = params;
   }
 
   connect(params?: Record<string, string>) {
@@ -38,8 +36,7 @@ class WebSocketClient {
       };
 
       this.ws.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        wsMessages.update(messages => [...messages, message]);
+        wsMessages.update(message => message = JSON.parse(event.data));
       };
 
       this.ws.onclose = () => {

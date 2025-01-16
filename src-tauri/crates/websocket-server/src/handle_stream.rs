@@ -12,6 +12,7 @@ pub async fn handle_message(text: ByteString, state: &AppState, mut session: Ses
                                 .user_connections
                                 .add_session(auth_message.user_id, session.clone())
                                 .await;
+                            println!("认证成功: {:?}, session_ids: {:?}", auth_message.user_id, state.user_connections.get_session_ids().await);
                             session.text(serde_json::to_string(&Response::success("认证成功")).unwrap()).await.context("认证失败")?;
                         }
                         Message::Text(text_message) => {
@@ -39,7 +40,7 @@ pub async fn handle_message(text: ByteString, state: &AppState, mut session: Ses
                                 }
                             } else {
                                 let user_id = text_message.receiver_id.context("接收者ID为空")?;
-                                println!("user_id: {}", user_id);
+                                println!("user_id: {}, session_ids: {:?}", user_id, state.user_connections.get_session_ids().await);
                                 if let Ok(ref mut session) = state
                                     .user_connections
                                     .get_session(user_id)
