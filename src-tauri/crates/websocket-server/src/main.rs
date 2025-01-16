@@ -6,10 +6,11 @@ use actix_ws::{AggregatedMessage, Session};
 use error::{Error as CusError, Result};
 use futures_util::StreamExt as _;
 use handle_stream::handle_message;
-use sea_orm::prelude::*;
+use sea_orm::{EntityTrait, ActiveModelTrait, Set, DatabaseConnection};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use std::sync::Arc;
+use entity::user::{Entity as User, ActiveModel};
 
 #[derive(Default)]
 pub struct AppState {
@@ -41,6 +42,7 @@ pub struct AuthMessage {
 pub struct WebRTCMessage {
     pub receiver_id: Option<i32>,
     pub group_id: Option<i32>,
+    pub sender_name: Option<String>,
     pub sdp: String,
 }
 
@@ -75,9 +77,9 @@ impl UserConnections {
         (*map).remove(&user_id);
     }
 
-    pub async fn get_session(&self, user_id: UserId) -> Option<Session> {
+    pub async fn get_session(&self, user_id: UserId) -> Result<Session> {
         let map = self.0.read().await;
-        map.get(&user_id).cloned()
+        map.get(&user_id).cloned().ok_or(CusError::SessionNotFound)
     }
 
     pub async fn is_auth(&self, user_id: UserId) -> bool {
@@ -97,7 +99,7 @@ async fn echo(
     stream: web::Payload,
 ) -> Result<HttpResponse, CusError> {
     let path = req.query_string();
-    let user_id = path.split("&").find(|s| s.starts_with("userId=")).ok_or(CusError::CustomError("userId is required".to_string()))?.split("=").last().ok_or(CusError::CustomError("userId is required".to_string()))?.parse::<i32>()?;
+    let user_id = path.split("&").find(|s| s.starts_with("userId=")).ok_or(CusError::CustomError("userId is required"))?.split("=").last().ok_or(CusError::CustomError("userId is required"))?.parse::<i32>()?;
     let (res, mut session, stream) = actix_ws::handle(&req, stream)?;
 
     let mut stream = stream
@@ -123,8 +125,21 @@ async fn echo(
                 Ok(AggregatedMessage::Ping(msg)) => {
                     session.pong(&msg).await.unwrap();
                 }
-                Ok(AggregatedMessage::Close(None)) => {
-                    println!("close");
+                Ok(AggregatedMessage::Close(Some(_))) => {
+                    println!("user disconnected: user_id: {}", user_id);
+                    let user = User::find_by_id(user_id).one(&state.db).await;
+                    match user {
+                        Ok(user) => {
+                            let user = user.unwrap();
+                            println!("user: {:?}", user);
+                            let mut user: ActiveModel = user.into();
+                            user.status = Set(0);
+                            user.update(&state.db).await.unwrap();
+                        }
+                        Err(_) => {
+                            println!("user not found: user_id: {}", user_id);
+                        }
+                    }
                     state.user_connections.remove_session(user_id).await;
                 }
 
@@ -140,7 +155,7 @@ async fn echo(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
-    
+
     let user_connections = Arc::new(UserConnections::new());
     let db = db::get_db().await.expect("error while connecting to database");
     HttpServer::new(move || {

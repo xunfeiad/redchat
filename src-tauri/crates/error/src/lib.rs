@@ -30,6 +30,16 @@ impl<T: Serialize> Response<T> {
             message: error.to_string(),
         }
     }
+
+    pub fn success_with_string(message: T) -> String {
+        let message = serde_json::to_string(&message).unwrap();
+        format!("{{\"code\":0,\"data\":null,\"message\":\"{}\"}}", message)
+    }
+
+    pub fn error_with_string(error: T) -> String {
+        let error = serde_json::to_string(&error).unwrap();
+        format!("{{\"code\":-1,\"data\":null,\"message\":\"{}\"}}", error)
+    }
 }
 
 #[derive(Error, Debug)]
@@ -63,7 +73,7 @@ pub enum Error {
     #[error("No authorization")]
     NoAuthorization,
     #[error("Error: {0}")]
-    CustomError(String),
+    CustomError(&'static str),
     #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
 }

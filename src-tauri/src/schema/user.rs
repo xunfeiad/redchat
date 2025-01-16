@@ -1,4 +1,4 @@
-use entity::user::{ActiveModel, Model};
+use entity::user::ActiveModel;
 use sea_orm::ActiveValue;
 use serde::{Deserialize, Serialize};
 use utils::hash_password;

@@ -1,9 +1,7 @@
 use deadpool_redis::redis::cmd;
 use deadpool_redis::{Config, Pool, Runtime};
 use error::Error;
-use sea_orm::Database;
-use sea_orm::{ConnectOptions, DatabaseConnection};
-use std::time::Duration;
+use sea_orm::DatabaseConnection;
 use tera::Tera;
 
 pub struct TauriState {
@@ -58,5 +56,4 @@ pub fn run() -> Result<(), Error> {
 }
 
 pub mod crud;
-pub mod rtc;
 pub mod schema;

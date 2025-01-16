@@ -4,25 +4,16 @@ export interface Response<T>{
     data: T;
 }
 
-export interface WebSocketMessage<T extends TextContent | AuthContent | WebRTCContent> {
+export interface WebSocketMessage{
     type: "text" | "auth" | "webrtc";
-    content: T;
+    content: {
+        receiverId?: number;
+        message?: string;
+        groupId?: number;
+        userId?: number;
+        token?: string;
+        sdp?: string;
+        senderName?: string;
+    };
 }
-
-export interface TextContent {
-    receiverId?: number;
-    message: string;
-    groupId?: number;
-}
-
-export interface AuthContent {
-    userId: number;
-    token?: string;
-}   
-
-export interface WebRTCContent {
-    receiverId: number;
-    sdp: string;
-}
-
 export type UserId = number;

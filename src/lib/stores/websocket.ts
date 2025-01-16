@@ -1,8 +1,8 @@
 import { writable } from 'svelte/store';
-import type { UserId, WebSocketMessage, TextContent, AuthContent, WebRTCContent } from '../../../types';
+import type { UserId, WebSocketMessage } from '../../../types';
 
 export const wsStatus = writable<'connecting' | 'open' | 'closed'>('closed');
-export const wsMessages = writable<WebSocketMessage<TextContent>>();
+export const wsMessages = writable<WebSocketMessage>();
 
 export interface WebSocketParams {
   userId: UserId;

@@ -68,15 +68,20 @@ GROUP BY
         ))
         .await?
         .into_iter()
-        .map(|m| Contact {
-            id: m.try_get("", "id").unwrap(),
-            name: m.try_get("", "name").unwrap_or(None),
-            avatar: m.try_get("", "avatar").unwrap_or(None),
-            unread: m.try_get::<i64>("", "unread").unwrap() as u64,
-            online: m.try_get("", "online").unwrap_or(false),
-            last_message_time: m.try_get("", "last_message_time").unwrap(),
-            last_message: m.try_get("", "last_message").unwrap_or(None),
-        })
+        .map(|m| {
+            println!("{:?}", m);
+
+            Contact {
+                id: m.try_get("", "id").unwrap(),
+                name: m.try_get("", "name").unwrap_or(None),
+                avatar: m.try_get("", "avatar").unwrap_or(None),
+                unread: m.try_get::<i64>("", "unread").unwrap() as u64,
+                online: m.try_get("", "online").unwrap_or(false),
+                last_message_time: m.try_get("", "last_message_time").unwrap(),
+                last_message: m.try_get("", "last_message").unwrap_or(None),
+            }
+        }
+            )
         .collect();
     println!("{:?}", contact);
     Ok(Response::success(contact))

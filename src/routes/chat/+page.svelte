@@ -1,9 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import type { Response, WebSocketMessage, TextContent} from "../../../types";
+  import type {
+    Response,
+    WebSocketMessage,
+  } from "../../../types";
+  import audio from "$lib/assets/remind_audio.mp3";
   import { wsClient, wsStatus, wsMessages } from "$lib/stores/websocket";
-    import { get } from "svelte/store";
+  import { get } from "svelte/store";
   // import { mediaDevices } from '@tauri-apps/api/window';
 
   interface Message {
@@ -46,7 +50,11 @@
   // 视频元素引用
   let localVideo: HTMLVideoElement | null = null;
   let remoteVideo: HTMLVideoElement | null = null;
-  let userInfo = localStorage.getItem('userInfo');
+  let userInfo = localStorage.getItem("userInfo");
+
+  let showIncomingCall = false;
+  let callerName = "";
+  let callType: "voice" | "video" = "voice";
 
   $: contacts;
   $: localStream;
@@ -89,19 +97,45 @@
         console.log("Authentication message sent:", authMessage);
       }
     });
-    wsMessages.subscribe((message: WebSocketMessage<TextContent>) => {
-      console.log("Received message:", message);
-      if(get(wsStatus) === 'open' && message.type === 'text'){
-        messages = [...messages, {
-          // id: message.content?.receiverId,
-          content: message.content?.message,
-          type: "text",
-          isSelf: false,
-          timestamp: new Date(),
-          status: "sent",
-        }]
-      }
-    });
+    wsMessages.subscribe(
+      async (
+        message: WebSocketMessage,
+      ) => {
+        console.log("Received message:", message);
+        if (get(wsStatus) !== "open") return;
+        switch (message.type) {
+          case "text":
+            messages = [
+              ...messages,
+              {
+                content: message.content!.message!,
+                type: "text",
+                isSelf: false,
+                timestamp: new Date(),
+                status: "sent",
+              },
+            ];
+            break;
+
+          case "auth":
+            break;
+          case "webrtc":
+            showIncomingCall = true;
+            // todo
+            callerName = message.content.senderName || "未知用户";
+            callType = "voice";
+            await initWebRTC();
+
+            let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
+            audioPlayer.addEventListener('ended', () => {
+              audioPlayer.currentTime = 0;
+              audioPlayer.play();
+            });
+            audioPlayer.play();
+            break;
+        }
+      },
+    );
     try {
       await get_contacts();
       console.log("Contacts loaded:", contacts);
@@ -133,7 +167,6 @@
     }, 100);
 
     try {
-      // 这里添加实际的消息发送逻辑
       const res: Response<object> = await invoke("send_message", {
         userId: userId,
         contactId: currentContact.id,
@@ -210,16 +243,16 @@
     try {
       localStream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: true
+        audio: true,
       });
       localVideo!.srcObject = localStream;
 
       peerConnection = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
 
       // 添加本地流
-      localStream.getTracks().forEach(track => {
+      localStream.getTracks().forEach((track) => {
         peerConnection!.addTrack(track, localStream!);
       });
 
@@ -229,7 +262,7 @@
         remoteVideo!.srcObject = remoteStream;
       };
     } catch (error) {
-      console.error('WebRTC 初始化失败:', error);
+      console.error("WebRTC 初始化失败:", error);
     }
   }
 
@@ -237,18 +270,18 @@
   async function startVideoCall() {
     if (!currentContact) return;
     await initWebRTC();
-    
+
     // 创建并发送 offer
     const offer = await peerConnection!.createOffer();
     await peerConnection!.setLocalDescription(offer);
 
     // 通过 WebSocket 发送 offer
     wsClient.send({
-      type: 'webrtc',
+      type: "webrtc",
       content: {
         receiverId: currentContact.id,
-        sdp: offer.sdp
-      }
+        sdp: offer.sdp,
+      },
     });
   }
 
@@ -256,37 +289,37 @@
   async function startVoiceCall() {
     if (!currentContact) return;
     await initWebRTC();
-    
+
     // 关闭视频轨道
-    localStream?.getVideoTracks().forEach(track => track.enabled = false);
-    
+    localStream?.getVideoTracks().forEach((track) => (track.enabled = false));
+
     // 创建并发送 offer
     const offer = await peerConnection!.createOffer();
     await peerConnection!.setLocalDescription(offer);
 
     wsClient.send({
-      type: 'webrtc',
+      type: "webrtc",
       content: {
         receiverId: currentContact.id,
-        sdp: offer.sdp
-      }
+        sdp: offer.sdp,
+      },
     });
   }
 
   // 处理 WebSocket 消息
   // wsClient.onMessage = async (message) => {
   //   const data = JSON.parse(message);
-    
+
   //   if (data.type === 'webrtc') {
   //     const { type, sdp } = data.content;
-      
+
   //     if (type === 'offer') {
   //       await initWebRTC();
   //       await peerConnection!.setRemoteDescription(new RTCSessionDescription(sdp));
-        
+
   //       const answer = await peerConnection!.createAnswer();
   //       await peerConnection!.setLocalDescription(answer);
-        
+
   //       wsClient.send({
   //         type: 'webrtc',
   //         content: {
@@ -301,12 +334,29 @@
   //   }
   // };
 
+  function handleAcceptCall() {
+    showIncomingCall = false;
+    let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+    // 处理接受通话逻辑...
+  }
+
+  function handleRejectCall() {
+    showIncomingCall = false;
+    let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+    // 处理拒绝通话逻辑...
+  }
+
   onDestroy(() => {
     wsClient.close();
-    localStream?.getTracks().forEach(track => track.stop());
+    localStream?.getTracks().forEach((track) => track.stop());
     peerConnection?.close();
   });
 </script>
+<audio id="remoteContactRemind" src={audio} ></audio>
 
 <div class="chat-container">
   <!-- 联系人列表 -->
@@ -358,7 +408,11 @@
         <div class="contact-info">
           <div class="avatar">
             {#if currentContact.avatar}
-              <img src={currentContact.avatar} alt={currentContact.name} class="avatar-img" />
+              <img
+                src={currentContact.avatar}
+                alt={currentContact.name}
+                class="avatar-img"
+              />
             {:else}
               <div class="avatar-placeholder">
                 {currentContact.name[0]}
@@ -367,15 +421,24 @@
           </div>
           <div class="contact-details">
             <h2>{currentContact.name}</h2>
-            <span class="status">{currentContact.online ? '在线' : '离线'}</span>
+            <span class="status">{currentContact.online ? "在线" : "离线"}</span
+            >
           </div>
         </div>
-        
+
         <div class="call-actions">
-          <button class="call-btn voice" on:click={startVoiceCall} title="语音通话">
+          <button
+            class="call-btn voice"
+            on:click={startVoiceCall}
+            title="语音通话"
+          >
             <i class="fas fa-phone">语音通话</i>
           </button>
-          <button class="call-btn video" on:click={startVideoCall} title="视频通话">
+          <button
+            class="call-btn video"
+            on:click={startVideoCall}
+            title="视频通话"
+          >
             <i class="fas fa-video">视频通话</i>
           </button>
         </div>
@@ -420,6 +483,30 @@
     {/if}
   </div>
 </div>
+
+{#if showIncomingCall}
+<div class="modal-backdrop">
+  <div class="incoming-call-modal">
+    <div class="call-avatar">
+      <i class="fas fa-{callType === 'voice' ? 'phone' : 'video'}" >{callerName}</i>
+    </div>
+    <div class="call-info">
+      <h3>{callerName}</h3>
+      <p>正在发起{callType === 'voice' ? '语音' : '视频'}通话...</p>
+    </div>
+    <div class="call-actions">
+      <button class="reject-btn" on:click={handleRejectCall}>
+        <i class="fas fa-phone-slash"></i>
+        <span>拒绝</span>
+      </button>
+      <button class="accept-btn" on:click={handleAcceptCall}>
+        <i class="fas fa-phone"></i>
+        <span>接听</span>
+      </button>
+    </div>
+  </div>
+</div>
+{/if}
 
 <style>
   .chat-container {
@@ -606,19 +693,19 @@
   }
 
   .voice {
-    background: #4CAF50;
+    background: #4caf50;
   }
 
   .voice:hover {
-    background: #43A047;
+    background: #43a047;
   }
 
   .video {
-    background: #2196F3;
+    background: #2196f3;
   }
 
   .video:hover {
-    background: #1E88E5;
+    background: #1e88e5;
   }
 
   .avatar {
@@ -845,5 +932,114 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .incoming-call-modal {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    width: 320px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .call-avatar {
+    width: 80px;
+    height: 80px;
+    background: #f0f2f5;
+    border-radius: 50%;
+    margin: 0 auto 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .call-avatar i {
+    font-size: 2rem;
+    color: #1976d2;
+  }
+
+  .call-info h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #1a1a1a;
+  }
+
+  .call-info p {
+    margin: 0.5rem 0 1.5rem;
+    color: #666;
+  }
+
+  .call-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+  }
+
+  .call-actions button {
+    width: 120px;
+    height: 48px;
+    border: none;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .accept-btn {
+    background: #4CAF50;
+    color: white;
+  }
+
+  .accept-btn:hover {
+    background: #43A047;
+    transform: translateY(-2px);
+  }
+
+  .reject-btn {
+    background: #f44336;
+    color: white;
+  }
+
+  .reject-btn:hover {
+    background: #e53935;
+    transform: translateY(-2px);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 </style>
