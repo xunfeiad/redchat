@@ -176,7 +176,7 @@
     currentContact = contact;
     // 清除未读消息
     await invoke("clear_unread", {
-      userId: 1,
+      userId: userId,
       contactId: contact.id,
     });
     await get_contacts();
