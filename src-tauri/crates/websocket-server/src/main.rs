@@ -4,14 +4,16 @@ use std::collections::HashMap;
 use actix_web::{rt, web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_ws::{AggregatedMessage, Session};
 use error::{Error as CusError, Result};
+use futures_util::stream::Filter;
 use futures_util::StreamExt as _;
 use handle_stream::handle_message;
-use sea_orm::{EntityTrait, ActiveModelTrait, Set, DatabaseConnection};
+use sea_orm::{EntityTrait, ActiveModelTrait, Set, DatabaseConnection, QueryFilter, ColumnTrait};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use std::sync::Arc;
 use entity::user::{Entity as User, ActiveModel};
-
+use entity::user_friend::{Entity as UserFriend, Column as UserFriendColumn};
+use anyhow::Context;
 #[derive(Default)]
 pub struct AppState {
     pub db: DatabaseConnection,
@@ -23,7 +25,7 @@ pub struct UserConnections(RwLock<HashMap<UserId, Session>>);
 
 type UserId = i32;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TextMessage {
     pub receiver_id: Option<i32>,
@@ -47,6 +49,12 @@ pub struct WebRTCMessage {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DisconnectMessage {
+    pub user_id: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "content")]
 #[serde(rename_all = "camelCase")]
 pub enum Message {
@@ -56,6 +64,8 @@ pub enum Message {
     Text(TextMessage),
     #[serde(rename = "webrtc")]
     WebRTC(WebRTCMessage),
+    #[serde(rename = "disconnect")]
+    Disconnect(DisconnectMessage),
 }
 
 pub const AUTH_TYPE: &str = "auth";
@@ -90,6 +100,35 @@ impl UserConnections {
     pub async fn get_session_ids(&self) -> Vec<UserId> {
         let map = self.0.read().await;
         map.keys().cloned().collect()
+    }
+
+    // When user_id is Some, send message to the specific user
+    // When user_id is None, send message to all users except the skip_user_id(self)
+    pub async fn find_session_and_send_message(&self, user_id: Option<UserId>, message: &Message, skip_user_id: Option<UserId>, db: Option<DatabaseConnection>) -> Result<()> {
+        let mut map = self.0.write().await;
+
+        match user_id {
+            Some(user_id) => {
+                let session = map.get_mut(&user_id).ok_or(CusError::SessionNotFound)?;
+                session.text(serde_json::to_string(message)?).await.context("send message error")?;
+
+            }
+            None => {
+                match skip_user_id {
+                    Some(skip_user_id) => {
+                        let notify_user_ids = UserFriend::find().filter(UserFriendColumn::UserId.eq(skip_user_id)).filter(UserFriendColumn::Status.eq(2)).all(db.as_ref().unwrap()).await?.into_iter().map(|user| user.friend_id).collect::<Vec<i32>>();
+                        println!("skip_user_id: {:?}, notify_user_ids: {:?}", skip_user_id, notify_user_ids);
+                        for (key, value) in map.iter_mut() {
+                            if notify_user_ids.contains(key){
+                                value.text(serde_json::to_string(message)?).await.context("send message error")?;
+                            }
+                        }
+                    }
+                    None => {}
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -133,12 +172,15 @@ async fn echo(
                             let user = user.unwrap();
                             println!("user: {:?}", user);
                             let mut user: ActiveModel = user.into();
-                            user.status = Set(0);
+                            user.online = Set(false);
                             user.update(&state.db).await.unwrap();
                         }
                         Err(_) => {
                             println!("user not found: user_id: {}", user_id);
                         }
+                    }
+                    if let Err(e) = state.user_connections.find_session_and_send_message(None, &Message::Disconnect(DisconnectMessage { user_id: user_id }), Some(user_id), Some(state.db.clone())).await {
+                        println!("send disconnect signal error: {}", e);
                     }
                     state.user_connections.remove_session(user_id).await;
                 }

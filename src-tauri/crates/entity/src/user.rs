@@ -41,7 +41,6 @@ impl ActiveModelBehavior for ActiveModel {
         C: ConnectionTrait,
     {
         println!("before_save");
-        self.password = ActiveValue::Set(utils::hash_password(self.password.as_ref()));
         let offset: FixedOffset = FixedOffset::east_opt(8 * 60 * 60).unwrap();
         let now_with_offset = Utc::now().with_timezone(&offset);
         if insert {

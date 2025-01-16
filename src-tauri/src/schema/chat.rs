@@ -1,14 +1,16 @@
 use chrono::{DateTime, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
-#[derive(Debug, Serialize, Deserialize)]
+use sea_orm::FromQueryResult;
+
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 #[serde(rename_all = "camelCase")]
 pub struct Contact {
     pub id: i32,
     pub name: Option<String>,
     pub avatar: Option<String>,
-    pub last_message_time: DateTime<Utc>,
+    pub last_message_time: Option<DateTime<Utc>>,
     pub last_message: Option<String>,
-    pub unread: u64,
+    pub unread: i64,
     pub online: bool,
 }
 

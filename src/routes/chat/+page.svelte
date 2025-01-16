@@ -4,8 +4,12 @@
   import type {
     Response,
     WebSocketMessage,
+    TextContent,
+    AuthContent,
+    WebRTCContent,
+    DisconnectContent
   } from "../../../types";
-  import audio from "$lib/assets/remind_audio.mp3";
+  import audio from "$lib/assets/remind_audio.wav";
   import { wsClient, wsStatus, wsMessages } from "$lib/stores/websocket";
   import { get } from "svelte/store";
   // import { mediaDevices } from '@tauri-apps/api/window';
@@ -99,30 +103,37 @@
     });
     wsMessages.subscribe(
       async (
-        message: WebSocketMessage,
+        message: WebSocketMessage<TextContent | AuthContent | WebRTCContent>,
       ) => {
         console.log("Received message:", message);
         if (get(wsStatus) !== "open") return;
+
         switch (message.type) {
           case "text":
             messages = [
               ...messages,
               {
-                content: message.content!.message!,
+                content: (message.content as TextContent).message,
                 type: "text",
                 isSelf: false,
                 timestamp: new Date(),
                 status: "sent",
               },
             ];
+            await get_contacts();
             break;
 
           case "auth":
+            userId = (message.content as AuthContent).userId;
+            contacts = contacts.map(contact => contact.id === userId ? { ...contact, online: true } : contact);
             break;
           case "webrtc":
+            console.log("---------------------");
+            console.log("webrtc", message);
+            console.log("---------------------");
             showIncomingCall = true;
             // todo
-            callerName = message.content.senderName || "未知用户";
+            callerName = (message.content as WebRTCContent).senderName || "未知用户";
             callType = "voice";
             await initWebRTC();
 
@@ -133,12 +144,17 @@
             });
             audioPlayer.play();
             break;
+          case "disconnect":
+            console.log("remote user disconnected.", message);
+            userId = (message.content as DisconnectContent).userId;
+            contacts = contacts.map(contact => contact.id === userId ? { ...contact, online: false } : contact);
+            break;
         }
+
       },
     );
     try {
       await get_contacts();
-      console.log("Contacts loaded:", contacts);
     } catch (error) {
       console.error("Failed to load contacts:", error);
       errorMessage = "加载联系人失败";
