@@ -1,0 +1,18 @@
+[package]
+name = "websocket-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web.workspace = true
+actix-ws.workspace = true
+tokio.workspace = true
+futures-util = "0.3.31"
+error.path = "../error"
+entity.path = "../entity"
+serde_json.workspace = true
+serde.workspace = true
+sea-orm.workspace = true
+anyhow.workspace = true
+bytestring.workspace = true
+bincode = "1.3"

@@ -1,0 +1,17 @@
+[package]
+name = "error"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror.workspace = true
+serde.workspace = true
+sea-orm.workspace = true
+serde_json.workspace = true
+lettre.workspace = true
+anyhow.workspace = true
+tera.workspace = true
+deadpool-redis.workspace = true
+log.workspace = true
+actix-web.workspace = true
+actix-ws.workspace = true

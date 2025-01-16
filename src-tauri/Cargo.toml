@@ -1,0 +1,57 @@
+[workspace]
+members = ["crates/*"]
+
+[package]
+name = "anycapture"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "anycapture_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde.workspace = true
+serde_json.workspace = true
+webrtc = "0.11.0"
+entity = { path = "crates/entity" }
+error = { path = "crates/error" }
+utils = { path = "crates/utils" }
+sea-orm.workspace = true
+log.workspace = true
+tokio.workspace = true
+tera = "1.20.0"
+deadpool-redis.workspace = true
+env_logger = "0.10.0"
+dotenv = "0.15.0"
+chrono.workspace = true
+
+[workspace.dependencies]
+serde_json = "1"
+sea-orm = { version = "1.1.0", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
+sea-orm-migration = { version = "1.0.0", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
+tokio = { version = "1", features = ["full"] }
+thiserror="1.0.65"
+serde = { version = "1", features = ["derive"] }
+lettre = "0.10.0"
+anyhow = "1.0.90"
+tera = "1.20.0"
+deadpool-redis = "0.18.0"
+log = "0.4.20"
+async-trait = "0.1"
+chrono = "0.4"
+actix-web = "^4"
+actix-ws = "^0"
+bytestring = "1.0.0"
