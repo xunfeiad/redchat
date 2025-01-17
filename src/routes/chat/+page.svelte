@@ -75,24 +75,31 @@
 
   }
   const getDescriptionByOffer = async (offer: RTCSessionDescription) => {
-    await localPeerConnection!.setLocalDescription(offer);
-    await remotePeerConnection!.setRemoteDescription(offer);
-    const answer = await localPeerConnection!.createAnswer();
-    wsClient.send({
-      type: "webrtc",
-      content: {
-        receiverId: userId,
-        senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-        content: answer.sdp,
-        sdpType: "answer",
-        callType: "video",
-      },
-    });
+    try {
+      await remotePeerConnection!.setRemoteDescription(offer);
+      const answer = await remotePeerConnection!.createAnswer();
+      await remotePeerConnection!.setLocalDescription(answer);
+      
+      wsClient.send({
+        type: "webrtc",
+        content: {
+          receiverId: userId,
+          senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+          content: answer.sdp,
+          sdpType: "answer",
+          callType: "video",
+        },
+      });
+    } catch (error) {
+      console.error("Error in getDescriptionByOffer:", error);
+    }
   }
   const getDescriptionByAnswer = async (answer: RTCSessionDescription) => {
-    await remotePeerConnection!.setLocalDescription(answer);
-    const offer = await remotePeerConnection!.createOffer();
-    await localPeerConnection!.setRemoteDescription(offer);
+    try {
+      await localPeerConnection!.setRemoteDescription(answer);
+    } catch (error) {
+      console.error("Error in getDescriptionByAnswer:", error);
+    }
   }
 
 
