@@ -90,7 +90,7 @@
   }
   const handleCandidate = async (content: WebRTCContent) => {
     console.log("handleCandidate", content.content);
-    await localPeerConnection!.addIceCandidate(new RTCIceCandidate(JSON.parse(content.content)));
+    await localPeerConnection!.addIceCandidate(JSON.parse(content.content));
   }
 
   onMount(async () => {
