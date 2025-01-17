@@ -113,10 +113,6 @@
     localPeerConnection = new RTCPeerConnection({ iceServers: iceServers });
     remotePeerConnection = new RTCPeerConnection({ iceServers: iceServers });
 
-    remotePeerConnection!.onicecandidate = async (event) => {
-      await localPeerConnection!.addIceCandidate(event.candidate);
-    };
-
     localPeerConnection!.onicecandidate = async (event) => {
       if (event.candidate) {
         wsClient.send({
