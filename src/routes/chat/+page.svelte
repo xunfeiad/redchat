@@ -121,6 +121,7 @@
           },
         });
       }
+      remotePeerConnection!.addIceCandidate(event.candidate);
     };
 
     wsClient.connect();
