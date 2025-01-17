@@ -87,12 +87,11 @@
   };
   const handleAnswer = async (content: WebRTCContent) => {
     console.log("handleAnswer", content);
-    const answer = JSON.parse(content.content);
-    if (answer) {
+    if (content.content) {
       localPeerConnection!.setRemoteDescription(
         new RTCSessionDescription({
           type: "answer",
-          sdp: answer.sdp,
+          sdp: content.content,
         }),
       );
     }
