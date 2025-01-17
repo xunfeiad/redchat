@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import type {
     Response,
@@ -66,10 +66,11 @@
 
   const handleOffer = async (content: WebRTCContent) => {
     if (content.content) {
-      remotePeerConnection!.setRemoteDescription({
+      await remotePeerConnection!.setRemoteDescription({
         type: "offer",
         sdp: content.content,
       });
+
       const answer = await remotePeerConnection!.createAnswer();
       await remotePeerConnection!.setLocalDescription(answer);
       wsClient.send({
@@ -84,9 +85,11 @@
     }
   };
   const handleAnswer = async (content: WebRTCContent) => {
+    console.log("localPeerConnection", localPeerConnection);
+    console.log("remotePeerConnection", remotePeerConnection);
     console.log("handleAnswer", content);
     if (content.content) {
-      localPeerConnection!.setRemoteDescription({
+      await localPeerConnection!.setRemoteDescription({
         type: "answer",
         sdp: content.content,
       });
@@ -104,8 +107,6 @@
     console.log(wsClient);
     userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
     userId = userInfo?.id || 0;
-    localVideo = document.createElement("video");
-    remoteVideo = document.createElement("video");
     localPeerConnection = new RTCPeerConnection({ iceServers: iceServers });
     remotePeerConnection = new RTCPeerConnection({ iceServers: iceServers });
 
@@ -121,7 +122,6 @@
           },
         });
       }
-      remotePeerConnection!.addIceCandidate(event.candidate);
     };
 
     wsClient.connect();
@@ -319,8 +319,15 @@
         video,
         audio,
       });
-      localVideo!.srcObject = localStream;
 
+      // 等待 DOM 更新后设置视频源
+      await tick();
+      if (localVideo) {
+        localVideo.srcObject = localStream;
+      }
+
+      console.log("localStream", localStream);
+      console.log("localVideo", localVideo);
       // 添加本地流
       localStream.getTracks().forEach((track) => {
         localPeerConnection!.addTrack(track, localStream!);
@@ -330,6 +337,7 @@
       remotePeerConnection!.ontrack = (event) => {
         remoteStream = event.streams[0];
         remoteVideo!.srcObject = remoteStream;
+        console.log("remoteVideo", remoteVideo);
       };
     } catch (error) {
       console.error("WebRTC 初始化失败:", error);
@@ -591,38 +599,42 @@
 {#if localStream || remoteStream}
   <div class="video-call-modal">
     <div class="video-container">
-      {#if localStream}
-        <div class="video-wrapper local">
-          <video bind:this={localVideo} autoplay playsinline muted> </video>
+      {#if remoteStream}
+        <div class="video-wrapper remote" id="remoteVideo">
+          <video bind:this={remoteVideo} autoplay playsinline>
+            <track kind="captions" srclang="en" label="English" />
+          </video>
         </div>
       {/if}
 
-      {#if remoteStream}
-        <div class="video-wrapper remote">
-          <video bind:this={remoteVideo} autoplay playsinline>
-            <track
-              kind="captions"
-              src="captions.vtt"
-              srclang="en"
-              label="English"
-              default
-            />
+      {#if localStream}
+        <div class="video-wrapper local" id="localVideo">
+          <video bind:this={localVideo} autoplay playsinline>
+            <track kind="captions" srclang="en" label="English" />
           </video>
         </div>
       {/if}
     </div>
 
     <div class="call-controls">
-      <button class="control-btn end" onclick={endCall}>
-        <i class="fas fa-phone-slash">结束</i>
+      <button class="control-btn end" onclick={endCall} aria-label="结束通话">
+        <i class="fas fa-phone-slash"></i>
       </button>
       {#if isVideoCall}
-        <button class="control-btn camera" onclick={toggleCamera}>
-          <i class="fas fa-video">摄像头</i>
+        <button
+          class="control-btn camera"
+          onclick={toggleCamera}
+          aria-label="切换摄像头"
+        >
+          <i class="fas fa-video"></i>
         </button>
       {/if}
-      <button class="control-btn mic" onclick={toggleMic}>
-        <i class="fas fa-microphone">麦克风</i>
+      <button
+        class="control-btn mic"
+        onclick={toggleMic}
+        aria-label="切换麦克风"
+      >
+        <i class="fas fa-microphone"></i>
       </button>
     </div>
   </div>
@@ -1173,36 +1185,41 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.9);
+    background: #000;
     z-index: 1100;
     display: flex;
     flex-direction: column;
   }
 
   .video-container {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem;
+    position: relative;
+    width: 100%;
+    height: 100%;
   }
 
   .video-wrapper {
-    position: relative;
-    width: 45%;
-    aspect-ratio: 16/9;
-    background: #000;
-    border-radius: 8px;
-    overflow: hidden;
+    width: 100%;
+    height: 100%;
+  }
+
+  .video-wrapper.remote {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
   }
 
   .video-wrapper.local {
     position: absolute;
-    width: 200px;
+    width: 240px;
+    height: 180px;
     right: 20px;
     bottom: 100px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.2);
   }
 
   .video-wrapper video {
@@ -1213,29 +1230,34 @@
 
   .call-controls {
     position: absolute;
-    bottom: 20px;
+    bottom: 40px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 1rem;
-    padding: 1rem;
-    background: rgba(0, 0, 0, 0.5);
+    gap: 20px;
+    padding: 16px 24px;
+    background: rgba(0, 0, 0, 0.6);
     border-radius: 50px;
+    backdrop-filter: blur(10px);
   }
 
   .control-btn {
-    width: 50px;
-    height: 50px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     border: none;
-    background: #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
     color: white;
     cursor: pointer;
     transition: all 0.2s;
   }
 
   .control-btn:hover {
-    background: #444;
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
   }
 
   .control-btn.end {
@@ -1244,5 +1266,9 @@
 
   .control-btn.end:hover {
     background: #c82333;
+  }
+
+  .control-btn i {
+    font-size: 24px;
   }
 </style>
