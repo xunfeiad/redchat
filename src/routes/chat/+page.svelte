@@ -10,7 +10,7 @@
     DisconnectContent,
     Message,
     Contact,
-    UserInfo
+    UserInfo,
   } from "../../../types";
   import audio from "$lib/assets/remind_audio.wav";
   import { wsClient, wsStatus, wsMessages } from "$lib/stores/websocket";
@@ -65,33 +65,45 @@
   };
 
   const handleOffer = async (content: WebRTCContent) => {
-    remotePeerConnection!.setRemoteDescription(new RTCSessionDescription({
-      type: "offer",
-      sdp: content.content,
-    }));
-    const answer = await remotePeerConnection!.createAnswer();
-    await remotePeerConnection!.setLocalDescription(answer);
-    wsClient.send({
-      type: "webrtc",
-      content: {
-        receiverId: content.receiverId,
-        senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-        content: answer.sdp,
-        sdpType: "answer",
-      },
-    });
-  }
+    if (content.content) {
+      remotePeerConnection!.setRemoteDescription(
+        new RTCSessionDescription({
+          type: "offer",
+          sdp: content.content,
+        }),
+      );
+      const answer = await remotePeerConnection!.createAnswer();
+      await remotePeerConnection!.setLocalDescription(answer);
+      wsClient.send({
+        type: "webrtc",
+        content: {
+          receiverId: content.receiverId,
+          senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+          content: answer.sdp,
+          sdpType: "answer",
+        },
+      });
+    }
+  };
   const handleAnswer = async (content: WebRTCContent) => {
     console.log("handleAnswer", content);
-    localPeerConnection!.setRemoteDescription(new RTCSessionDescription({
-      type: "answer",
-      sdp: content.content,
-    }));
-  }
+    const answer = JSON.parse(content.content);
+    if (answer) {
+      localPeerConnection!.setRemoteDescription(
+        new RTCSessionDescription({
+          type: "answer",
+          sdp: answer.sdp,
+        }),
+      );
+    }
+  };
   const handleCandidate = async (content: WebRTCContent) => {
     console.log("handleCandidate", content.content);
-    await localPeerConnection!.addIceCandidate(JSON.parse(content.content));
-  }
+    const candidate = JSON.parse(content.content);
+    if (candidate.candidate) {
+      await localPeerConnection!.addIceCandidate(candidate);
+    }
+  };
 
   onMount(async () => {
     console.log(wsClient);
@@ -99,25 +111,27 @@
     userId = userInfo?.id || 0;
     localVideo = document.createElement("video");
     remoteVideo = document.createElement("video");
-    localPeerConnection = new RTCPeerConnection({iceServers:iceServers});
-    remotePeerConnection = new RTCPeerConnection({iceServers:iceServers});
+    localPeerConnection = new RTCPeerConnection({ iceServers: iceServers });
+    remotePeerConnection = new RTCPeerConnection({ iceServers: iceServers });
 
     remotePeerConnection!.onicecandidate = async (event) => {
       await localPeerConnection!.addIceCandidate(event.candidate);
     };
 
     localPeerConnection!.onicecandidate = async (event) => {
-      wsClient.send({
-        type: "webrtc",
-        content: {
-          receiverId: userId,
-          senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-          content: JSON.stringify(event.candidate),
-          sdpType: "candidate",
-        },
-      });
+      if (event.candidate) {
+        wsClient.send({
+          type: "webrtc",
+          content: {
+            receiverId: userId,
+            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+            content: JSON.stringify(event.candidate),
+            sdpType: "candidate",
+          },
+        });
+      }
     };
-    
+
     wsClient.connect();
     // 订阅 wsState 的变化
     wsStatus.subscribe((state) => {
@@ -160,20 +174,27 @@
 
           case "auth":
             const authUserId = (message.content as AuthContent).userId;
-            contacts = contacts.map(contact => contact.id === authUserId ? { ...contact, online: true } : contact);
+            contacts = contacts.map((contact) =>
+              contact.id === authUserId
+                ? { ...contact, online: true }
+                : contact,
+            );
             break;
           case "webrtc":
             showIncomingCall = true;
-            callerName = (message.content as WebRTCContent).senderName || "未知用户";
-            let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
-            audioPlayer.addEventListener('ended', () => {
+            callerName =
+              (message.content as WebRTCContent).senderName || "未知用户";
+            let audioPlayer = document.getElementById(
+              "remoteContactRemind",
+            ) as HTMLAudioElement;
+            audioPlayer.addEventListener("ended", () => {
               audioPlayer.currentTime = 0;
               audioPlayer.play();
             });
-            audioPlayer.play(); 
+            audioPlayer.play();
 
             const rtc_type = (message.content as WebRTCContent).sdpType;
-            switch(rtc_type){
+            switch (rtc_type) {
               case "offer":
                 await handleOffer(message.content as WebRTCContent);
                 break;
@@ -187,11 +208,15 @@
             break;
           case "disconnect":
             console.log("remote user disconnected.", message);
-            const disConnectUserId = (message.content as DisconnectContent).userId;
-            contacts = contacts.map(contact => contact.id === disConnectUserId ? { ...contact, online: false } : contact);
+            const disConnectUserId = (message.content as DisconnectContent)
+              .userId;
+            contacts = contacts.map((contact) =>
+              contact.id === disConnectUserId
+                ? { ...contact, online: false }
+                : contact,
+            );
             break;
         }
-
       },
     );
     try {
@@ -309,7 +334,6 @@
         localPeerConnection!.addTrack(track, localStream!);
       });
 
-      
       // 处理远程流
       remotePeerConnection!.ontrack = (event) => {
         remoteStream = event.streams[0];
@@ -319,7 +343,6 @@
       console.error("WebRTC 初始化失败:", error);
     }
   }
-
 
   // 开始视频通话
   async function startVideoCall() {
@@ -367,25 +390,29 @@
 
   function handleRejectCall() {
     showIncomingCall = false;
-    let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
+    let audioPlayer = document.getElementById(
+      "remoteContactRemind",
+    ) as HTMLAudioElement;
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
     // 处理拒绝通话逻辑...
   }
   async function handleAcceptCall() {
     showIncomingCall = false;
-    let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
+    let audioPlayer = document.getElementById(
+      "remoteContactRemind",
+    ) as HTMLAudioElement;
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
-    
+
     // 初始化WebRTC
-    const isVideo = callType === 'video';
+    const isVideo = callType === "video";
     isVideoCall = isVideo;
     await initWebRTC(isVideo, true);
   }
 
   function endCall() {
-    localStream?.getTracks().forEach(track => track.stop());
+    localStream?.getTracks().forEach((track) => track.stop());
     localPeerConnection?.close();
     remotePeerConnection?.close();
     localStream = null;
@@ -414,7 +441,8 @@
     remotePeerConnection?.close();
   });
 </script>
-<audio id="remoteContactRemind" src={audio} ></audio>
+
+<audio id="remoteContactRemind" src={audio}></audio>
 
 <div class="chat-container">
   <!-- 联系人列表 -->
@@ -543,71 +571,69 @@
 </div>
 
 {#if showIncomingCall}
-<div class="modal-backdrop">
-  <div class="incoming-call-modal">
-    <div class="call-avatar">
-      <i class="fas fa-{callType === 'voice' ? 'phone' : 'video'}" >{callerName}</i>
-    </div>
-    <div class="call-info">
-      <h3>{callerName}</h3>
-      <p>正在发起{callType === 'voice' ? '语音' : '视频'}通话...</p>
-    </div>
-    <div class="call-actions">
-      <button class="reject-btn" onclick={handleRejectCall}>
-        <i class="fas fa-phone-slash"></i>
-        <span>拒绝</span>
-      </button>
-      <button class="accept-btn" onclick={handleAcceptCall}>
-        <i class="fas fa-phone"></i>
-        <span>接听</span>
-      </button>
+  <div class="modal-backdrop">
+    <div class="incoming-call-modal">
+      <div class="call-avatar">
+        <i class="fas fa-{callType === 'voice' ? 'phone' : 'video'}"
+          >{callerName}</i
+        >
+      </div>
+      <div class="call-info">
+        <h3>{callerName}</h3>
+        <p>正在发起{callType === "voice" ? "语音" : "视频"}通话...</p>
+      </div>
+      <div class="call-actions">
+        <button class="reject-btn" onclick={handleRejectCall}>
+          <i class="fas fa-phone-slash"></i>
+          <span>拒绝</span>
+        </button>
+        <button class="accept-btn" onclick={handleAcceptCall}>
+          <i class="fas fa-phone"></i>
+          <span>接听</span>
+        </button>
+      </div>
     </div>
   </div>
-</div>
 {/if}
 
 {#if localStream || remoteStream}
-<div class="video-call-modal">
-  <div class="video-container">
-    {#if localStream}
-      <div class="video-wrapper local">
-        <video 
-          bind:this={localVideo}
-          autoplay 
-          playsinline 
-          muted
-        >
-        </video>
-      </div>
-    {/if}
-    
-    {#if remoteStream}
-      <div class="video-wrapper remote">
-        <video 
-          bind:this={remoteVideo}
-          autoplay 
-          playsinline
-        >
-        <track kind="captions" src="captions.vtt" srclang="en" label="English" default>
-        </video>
-      </div>
-    {/if}
-  </div>
+  <div class="video-call-modal">
+    <div class="video-container">
+      {#if localStream}
+        <div class="video-wrapper local">
+          <video bind:this={localVideo} autoplay playsinline muted> </video>
+        </div>
+      {/if}
 
-  <div class="call-controls">
-    <button class="control-btn end" onclick={endCall}>
-      <i class="fas fa-phone-slash">结束</i>
-    </button>
-    {#if isVideoCall}
-      <button class="control-btn camera" onclick={toggleCamera}>
-        <i class="fas fa-video">摄像头</i>
+      {#if remoteStream}
+        <div class="video-wrapper remote">
+          <video bind:this={remoteVideo} autoplay playsinline>
+            <track
+              kind="captions"
+              src="captions.vtt"
+              srclang="en"
+              label="English"
+              default
+            />
+          </video>
+        </div>
+      {/if}
+    </div>
+
+    <div class="call-controls">
+      <button class="control-btn end" onclick={endCall}>
+        <i class="fas fa-phone-slash">结束</i>
       </button>
-    {/if}
-    <button class="control-btn mic" onclick={toggleMic}>
-      <i class="fas fa-microphone">麦克风</i>
-    </button>
+      {#if isVideoCall}
+        <button class="control-btn camera" onclick={toggleCamera}>
+          <i class="fas fa-video">摄像头</i>
+        </button>
+      {/if}
+      <button class="control-btn mic" onclick={toggleMic}>
+        <i class="fas fa-microphone">麦克风</i>
+      </button>
+    </div>
   </div>
-</div>
 {/if}
 
 <style>
@@ -1110,12 +1136,12 @@
   }
 
   .accept-btn {
-    background: #4CAF50;
+    background: #4caf50;
     color: white;
   }
 
   .accept-btn:hover {
-    background: #43A047;
+    background: #43a047;
     transform: translateY(-2px);
   }
 
@@ -1130,8 +1156,12 @@
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   @keyframes slideIn {
@@ -1180,7 +1210,7 @@
     width: 200px;
     right: 20px;
     bottom: 100px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
   }
 
   .video-wrapper video {
@@ -1197,7 +1227,7 @@
     display: flex;
     gap: 1rem;
     padding: 1rem;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.5);
     border-radius: 50px;
   }
 
