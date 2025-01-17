@@ -32,8 +32,8 @@
   let remoteStream: MediaStream | null = $state(null);
   const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 
-  let localPeerConnection: RTCPeerConnection | null = $state(null);
-  let remotePeerConnection: RTCPeerConnection | null = $state(null);
+  let localPeerConnection: RTCPeerConnection = new RTCPeerConnection({iceServers:iceServers});
+  let remotePeerConnection: RTCPeerConnection = new RTCPeerConnection({iceServers:iceServers});
 
   // 视频元素引用
   let localVideo: HTMLVideoElement | null = null;
@@ -111,8 +111,6 @@
     userId = userInfo?.id || 0;
     localVideo = document.createElement("video");
     remoteVideo = document.createElement("video");
-    localPeerConnection = new RTCPeerConnection({iceServers:iceServers});
-    remotePeerConnection = new RTCPeerConnection({iceServers:iceServers});
 
     localPeerConnection!.onicecandidate = async (event) => {
       await remotePeerConnection!.addIceCandidate(event.candidate);
