@@ -69,8 +69,8 @@
       type: "offer",
       sdp: content.content,
     }));
-    const answer = await localPeerConnection!.createAnswer();
-    await localPeerConnection!.setLocalDescription(answer);
+    const answer = await remotePeerConnection!.createAnswer();
+    await remotePeerConnection!.setLocalDescription(answer);
     wsClient.send({
       type: "webrtc",
       content: {
@@ -83,14 +83,14 @@
   }
   const handleAnswer = async (content: WebRTCContent) => {
     console.log("handleAnswer", content);
-    remotePeerConnection!.setRemoteDescription(new RTCSessionDescription({
+    localPeerConnection!.setRemoteDescription(new RTCSessionDescription({
       type: "answer",
       sdp: content.content,
     }));
   }
   const handleCandidate = async (content: WebRTCContent) => {
-    console.log("handleCandidate", content);
-    await remotePeerConnection!.addIceCandidate(new RTCIceCandidate({candidate: content.content}));
+    console.log("handleCandidate", content.content);
+    await localPeerConnection!.addIceCandidate(new RTCIceCandidate(JSON.parse(content.content)));
   }
 
   onMount(async () => {
@@ -107,7 +107,15 @@
     };
 
     localPeerConnection!.onicecandidate = async (event) => {
-      await remotePeerConnection!.addIceCandidate(event.candidate);
+      wsClient.send({
+        type: "webrtc",
+        content: {
+          receiverId: userId,
+          senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+          content: JSON.stringify(event.candidate),
+          sdpType: "candidate",
+        },
+      });
     };
     
     wsClient.connect();
