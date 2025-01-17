@@ -36,8 +36,8 @@
   let remotePeerConnection: RTCPeerConnection | null = $state(null);
 
   // 视频元素引用
-  let localVideo: HTMLVideoElement | null = null;
-  let remoteVideo: HTMLVideoElement | null = null;
+  let localVideo: HTMLVideoElement | null = $state(null);
+  let remoteVideo: HTMLVideoElement | null = $state(null);
   // 用户id
   let userId: number = $state(0);
 
@@ -69,8 +69,8 @@
       type: "offer",
       sdp: content.content,
     }));
-    const answer = await remotePeerConnection!.createAnswer();
-    await remotePeerConnection!.setLocalDescription(answer);
+    const answer = await localPeerConnection!.createAnswer();
+    await localPeerConnection!.setLocalDescription(answer);
     wsClient.send({
       type: "webrtc",
       content: {
@@ -83,14 +83,14 @@
   }
   const handleAnswer = async (content: WebRTCContent) => {
     console.log("handleAnswer", content);
-    localPeerConnection!.setRemoteDescription(new RTCSessionDescription({
+    remotePeerConnection!.setRemoteDescription(new RTCSessionDescription({
       type: "answer",
       sdp: content.content,
     }));
   }
   const handleCandidate = async (content: WebRTCContent) => {
     console.log("handleCandidate", content);
-    await localPeerConnection!.addIceCandidate(new RTCIceCandidate({candidate: content.content}));
+    await remotePeerConnection!.addIceCandidate(new RTCIceCandidate({candidate: content.content}));
   }
 
   onMount(async () => {
@@ -102,8 +102,8 @@
     localPeerConnection = new RTCPeerConnection({iceServers:iceServers});
     remotePeerConnection = new RTCPeerConnection({iceServers:iceServers});
 
-    localPeerConnection!.onicecandidate = async (event) => {
-      await remotePeerConnection!.addIceCandidate(event.candidate);
+    remotePeerConnection!.onicecandidate = async (event) => {
+      await localPeerConnection!.addIceCandidate(event.candidate);
     };
     
     wsClient.connect();
@@ -361,11 +361,39 @@
     audioPlayer.currentTime = 0;
     // 处理拒绝通话逻辑...
   }
-  function handleAcceptCall(){
+  async function handleAcceptCall() {
     showIncomingCall = false;
     let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
+    
+    // 初始化WebRTC
+    const isVideo = callType === 'video';
+    isVideoCall = isVideo;
+    await initWebRTC(isVideo, true);
+  }
+
+  function endCall() {
+    localStream?.getTracks().forEach(track => track.stop());
+    localPeerConnection?.close();
+    remotePeerConnection?.close();
+    localStream = null;
+    remoteStream = null;
+    isVideoCall = false;
+  }
+
+  function toggleCamera() {
+    const videoTrack = localStream?.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = !videoTrack.enabled;
+    }
+  }
+
+  function toggleMic() {
+    const audioTrack = localStream?.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+    }
   }
 
   onDestroy(() => {
@@ -523,6 +551,50 @@
         <span>接听</span>
       </button>
     </div>
+  </div>
+</div>
+{/if}
+
+{#if localStream || remoteStream}
+<div class="video-call-modal">
+  <div class="video-container">
+    {#if localStream}
+      <div class="video-wrapper local">
+        <video 
+          bind:this={localVideo}
+          autoplay 
+          playsinline 
+          muted
+        >
+        </video>
+      </div>
+    {/if}
+    
+    {#if remoteStream}
+      <div class="video-wrapper remote">
+        <video 
+          bind:this={remoteVideo}
+          autoplay 
+          playsinline
+        >
+        <track kind="captions" src="captions.vtt" srclang="en" label="English" default>
+        </video>
+      </div>
+    {/if}
+  </div>
+
+  <div class="call-controls">
+    <button class="control-btn end" onclick={endCall}>
+      <i class="fas fa-phone-slash">结束</i>
+    </button>
+    {#if isVideoCall}
+      <button class="control-btn camera" onclick={toggleCamera}>
+        <i class="fas fa-video">摄像头</i>
+      </button>
+    {/if}
+    <button class="control-btn mic" onclick={toggleMic}>
+      <i class="fas fa-microphone">麦克风</i>
+    </button>
   </div>
 </div>
 {/if}
@@ -1060,5 +1132,84 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  .video-call-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .video-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .video-wrapper {
+    position: relative;
+    width: 45%;
+    aspect-ratio: 16/9;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .video-wrapper.local {
+    position: absolute;
+    width: 200px;
+    right: 20px;
+    bottom: 100px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  }
+
+  .video-wrapper video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .call-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(0,0,0,0.5);
+    border-radius: 50px;
+  }
+
+  .control-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    background: #333;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .control-btn:hover {
+    background: #444;
+  }
+
+  .control-btn.end {
+    background: #dc3545;
+  }
+
+  .control-btn.end:hover {
+    background: #c82333;
   }
 </style>
