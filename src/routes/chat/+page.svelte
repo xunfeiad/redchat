@@ -48,7 +48,8 @@
   let callerName = $state("");
   // 来电类型
   let callType: "voice" | "video" | null = $state(null);
-  // rtc约束
+  // 是否是视频通话
+  let isVideoCall = $state(false);
 
   const get_contacts = async () => {
     try {
@@ -63,45 +64,34 @@
     }
   };
 
-
   const handleOffer = async (content: WebRTCContent) => {
-    console.log("handleOffer");
-    await remotePeerConnection!.setRemoteDescription(new RTCSessionDescription({
+    remotePeerConnection!.setRemoteDescription(new RTCSessionDescription({
       type: "offer",
       sdp: content.content,
     }));
     const answer = await remotePeerConnection!.createAnswer();
     await remotePeerConnection!.setLocalDescription(answer);
-
+    wsClient.send({
+      type: "webrtc",
+      content: {
+        receiverId: content.receiverId,
+        senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+        content: answer.sdp,
+        sdpType: "answer",
+      },
+    });
   }
-  const getDescriptionByOffer = async (offer: RTCSessionDescription) => {
-    try {
-      await remotePeerConnection!.setRemoteDescription(offer);
-      const answer = await remotePeerConnection!.createAnswer();
-      await remotePeerConnection!.setLocalDescription(answer);
-      
-      wsClient.send({
-        type: "webrtc",
-        content: {
-          receiverId: userId,
-          senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-          content: answer.sdp,
-          sdpType: "answer",
-          callType: "video",
-        },
-      });
-    } catch (error) {
-      console.error("Error in getDescriptionByOffer:", error);
-    }
+  const handleAnswer = async (content: WebRTCContent) => {
+    console.log("handleAnswer", content);
+    localPeerConnection!.setRemoteDescription(new RTCSessionDescription({
+      type: "answer",
+      sdp: content.content,
+    }));
   }
-  const getDescriptionByAnswer = async (answer: RTCSessionDescription) => {
-    try {
-      await localPeerConnection!.setRemoteDescription(answer);
-    } catch (error) {
-      console.error("Error in getDescriptionByAnswer:", error);
-    }
+  const handleCandidate = async (content: WebRTCContent) => {
+    console.log("handleCandidate", content);
+    await localPeerConnection!.addIceCandidate(new RTCIceCandidate({candidate: content.content}));
   }
-
 
   onMount(async () => {
     console.log(wsClient);
@@ -115,9 +105,7 @@
     localPeerConnection!.onicecandidate = async (event) => {
       await remotePeerConnection!.addIceCandidate(event.candidate);
     };
-    remotePeerConnection!.onicecandidate = async (event) => {
-      await localPeerConnection!.addIceCandidate(event.candidate);
-    };
+    
     wsClient.connect();
     // 订阅 wsState 的变化
     wsStatus.subscribe((state) => {
@@ -175,19 +163,13 @@
             const rtc_type = (message.content as WebRTCContent).sdpType;
             switch(rtc_type){
               case "offer":
-                await getDescriptionByOffer(new RTCSessionDescription({
-                  type: "offer",
-                  sdp: (message.content as WebRTCContent).content,
-                }));
+                await handleOffer(message.content as WebRTCContent);
                 break;
               case "answer":
-                await getDescriptionByAnswer(new RTCSessionDescription({
-                  type: "answer",
-                  sdp: (message.content as WebRTCContent).content,
-                }));
+                await handleAnswer(message.content as WebRTCContent);
                 break;
               case "candidate":
-                // await handleCandidate(message.content as WebRTCContent);
+                await handleCandidate(message.content as WebRTCContent);
                 break;
             }
             break;
@@ -335,7 +317,6 @@
     // 创建并发送 offer
     const offer = await localPeerConnection!.createOffer();
     await localPeerConnection!.setLocalDescription(offer);
-
     // 通过 WebSocket 发送 offer
     wsClient.send({
       type: "webrtc",
@@ -360,6 +341,7 @@
     // 创建并发送 offer
     const offer = await localPeerConnection!.createOffer();
     await localPeerConnection!.setLocalDescription(offer);
+    await remotePeerConnection!.setRemoteDescription(offer);
     wsClient.send({
       type: "webrtc",
       content: {
