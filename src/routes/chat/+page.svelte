@@ -90,12 +90,7 @@
       type: "answer",
       sdp: content.content,
     }));
-  } 
-
-  const handleCandidate = async (content: WebRTCContent) => {
-    console.log("handleCandidate:", content);
-    localPeerConnection!.addIceCandidate(new RTCIceCandidate({candidate:content.content}));
-  } 
+  }
 
   onMount(async () => {
     console.log(wsClient);
