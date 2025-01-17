@@ -32,8 +32,8 @@
   let remoteStream: MediaStream | null = $state(null);
   const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 
-  let localPeerConnection: RTCPeerConnection = new RTCPeerConnection({iceServers:iceServers});
-  let remotePeerConnection: RTCPeerConnection = new RTCPeerConnection({iceServers:iceServers});
+  let localPeerConnection: RTCPeerConnection | null = $state(null);
+  let remotePeerConnection: RTCPeerConnection | null = $state(null);
 
   // 视频元素引用
   let localVideo: HTMLVideoElement | null = null;
@@ -86,11 +86,17 @@
 
   const handleAnswer = async (content: WebRTCContent) => {
     console.log("handleAnswer:", content);
+    console.log(localPeerConnection);
     await localPeerConnection!.setRemoteDescription(new RTCSessionDescription({
       type: "answer",
       sdp: content.content,
     }));
   }
+
+  const handleCandidate = async (content: WebRTCContent) => {
+    console.log("handleCandidate:", content);
+    await localPeerConnection!.addIceCandidate(new RTCIceCandidate({candidate:content.content}));
+  } 
 
   onMount(async () => {
     console.log(wsClient);
@@ -98,6 +104,8 @@
     userId = userInfo?.id || 0;
     localVideo = document.createElement("video");
     remoteVideo = document.createElement("video");
+    localPeerConnection = new RTCPeerConnection({iceServers:iceServers});
+    remotePeerConnection = new RTCPeerConnection({iceServers:iceServers});
 
     localPeerConnection!.onicecandidate = async (event) => {
       await remotePeerConnection!.addIceCandidate(event.candidate);
