@@ -90,10 +90,6 @@
       type: "answer",
       sdp: content.content,
     }));
-    await remotePeerConnection!.setLocalDescription(new RTCSessionDescription({
-      type: "answer",
-      sdp: content.content,
-    }));
   } 
 
   const handleCandidate = async (content: WebRTCContent) => {
