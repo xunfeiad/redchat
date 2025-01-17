@@ -93,7 +93,7 @@
   };
   const handleAnswer = async (content: WebRTCContent) => {
     console.log("localPeerConnection", localPeerConnection);
-    console.log("remotePeerConnection", remotePeerConnection);
+    // console.log("remotePeerConnection", remotePeerConnection);
     console.log("handleAnswer", content);
     if (content.content) {
       await localPeerConnection!.setRemoteDescription({
