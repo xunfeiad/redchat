@@ -116,32 +116,14 @@
 
     localPeerConnection!.onicecandidate =(event) => {
       if (event.candidate) {
-        wsClient.send({
-          type: "webrtc",
-          content: {
-            receiverId: currentContact?.id,
-            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-            content: JSON.stringify(event.candidate),
-            sdpType: "candidate",
-            candidateType: "local",
-          },
-        });
+        remotePeerConnection!.addIceCandidate(event.candidate);
       }
     };
     remotePeerConnection!.onicecandidate = (event) => {
       if (event.candidate) {
-        wsClient.send({
-          type: "webrtc",
-          content: {
-            receiverId: currentContact?.id,
-            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-            content: JSON.stringify(event.candidate),
-            sdpType: "candidate",
-            candidateType: "remote",
-          },
-        });
+        localPeerConnection!.addIceCandidate(event.candidate);
       }
-    }
+    };
 
 
     wsClient.connect();
