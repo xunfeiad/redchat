@@ -32,8 +32,8 @@
   let remoteStream: MediaStream | null = $state(null);
   const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 
-  let localPeerConnection: RTCPeerConnection;
-  let remotePeerConnection: RTCPeerConnection;
+  let localPeerConnection: RTCPeerConnection | null = $state(null);
+  let remotePeerConnection: RTCPeerConnection | null = $state(null);
 
   // 视频元素引用
   let localVideo: HTMLVideoElement | null = null;
@@ -66,7 +66,7 @@
 
   const handleOffer = async (content: WebRTCContent) => {
     console.log("handleOffer");
-    await remotePeerConnection.setRemoteDescription(new RTCSessionDescription({
+    await remotePeerConnection!.setRemoteDescription(new RTCSessionDescription({
       type: "offer",
       sdp: content.content,
     }));
@@ -114,11 +114,11 @@
     localPeerConnection = new RTCPeerConnection({iceServers:iceServers});
     remotePeerConnection = new RTCPeerConnection({iceServers:iceServers});
 
-    localPeerConnection.onicecandidate = async (event) => {
-      await get_other_pc(localPeerConnection).addIceCandidate(event.candidate);
+    localPeerConnection!.onicecandidate = async (event) => {
+      await remotePeerConnection!.addIceCandidate(event.candidate);
     };
-    remotePeerConnection.onicecandidate = async (event) => {
-      await get_other_pc(remotePeerConnection).addIceCandidate(event.candidate);
+    remotePeerConnection!.onicecandidate = async (event) => {
+      await localPeerConnection!.addIceCandidate(event.candidate);
     };
     wsClient.connect();
     // 订阅 wsState 的变化
@@ -389,7 +389,8 @@
   onDestroy(() => {
     wsClient.close();
     localStream?.getTracks().forEach((track) => track.stop());
-    peerConnection?.close();
+    localPeerConnection?.close();
+    remotePeerConnection?.close();
   });
 </script>
 <audio id="remoteContactRemind" src={audio} ></audio>
