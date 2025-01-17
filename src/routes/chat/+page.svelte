@@ -78,7 +78,7 @@
         receiverId: content.receiverId,
         senderName: userInfo?.nickname || userInfo?.username || "未知用户",
         content: answer.sdp,
-        sdp_type: "answer",
+        sdpType: "answer",
         callType: content.callType,
       },
     });
@@ -174,7 +174,7 @@
             });
             audioPlayer.play(); 
 
-            const rtc_type = (message.content as WebRTCContent).sdp_type;
+            const rtc_type = (message.content as WebRTCContent).sdpType;
             switch(rtc_type){
               case "offer":
                 handleOffer(message.content as WebRTCContent);
@@ -343,7 +343,7 @@
         receiverId: currentContact.id,
         senderName: userInfo?.nickname || userInfo?.username || "未知用户",
         content: offer.sdp,
-        sdp_type: "offer",
+        sdpType: "offer",
         callType: "video",
       },
     });
@@ -366,7 +366,7 @@
         receiverId: currentContact.id,
         senderName: userInfo?.nickname || userInfo?.username || "未知用户",
         content: offer.sdp,
-        sdp_type: "offer",
+        sdpType: "offer",
         callType: "voice",
       },
     });

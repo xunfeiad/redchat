@@ -24,7 +24,7 @@ export interface WebRTCContent {
     receiverId?: number;
     senderName?: string;
     callType?: "video" | "voice";
-    sdp_type: "offer" | "answer" | "candidate";
+    sdpType: "offer" | "answer" | "candidate";
     content: string;
 }
 
