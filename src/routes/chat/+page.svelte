@@ -110,20 +110,6 @@
     localPeerConnection = new RTCPeerConnection({ iceServers: iceServers });
     remotePeerConnection = new RTCPeerConnection({ iceServers: iceServers });
 
-    localPeerConnection!.onicecandidate = async (event) => {
-      if (event.candidate) {
-        wsClient.send({
-          type: "webrtc",
-          content: {
-            receiverId: userId,
-            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-            content: JSON.stringify(event.candidate),
-            sdpType: "candidate",
-          },
-        });
-      }
-    };
-
     wsClient.connect();
     // 订阅 wsState 的变化
     wsStatus.subscribe((state) => {
@@ -339,6 +325,19 @@
         remoteVideo!.srcObject = remoteStream;
         console.log("remoteVideo", remoteVideo);
       };
+      localPeerConnection!.onicecandidate =(event) => {
+      if (event.candidate) {
+        wsClient.send({
+          type: "webrtc",
+          content: {
+            receiverId: userId,
+            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+            content: JSON.stringify(event.candidate),
+            sdpType: "candidate",
+          },
+        });
+      }
+    };
     } catch (error) {
       console.error("WebRTC 初始化失败:", error);
     }
