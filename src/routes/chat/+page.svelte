@@ -33,7 +33,6 @@
   const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 
   let localPeerConnection: RTCPeerConnection | null = $state(null);
-  let remotePeerConnection: RTCPeerConnection | null = $state(null);
 
   // 视频元素引用
   let localVideo: HTMLVideoElement | null = $state(null);
@@ -65,23 +64,31 @@
   };
 
   const handleOffer = async (content: WebRTCContent) => {
-    if (content.content) {
-      await remotePeerConnection!.setRemoteDescription({
+    try {
+      // 初始化本地媒体
+      await initWebRTC(content.callType === "video", true);
+      
+      // 设置远程描述
+      await localPeerConnection!.setRemoteDescription(new RTCSessionDescription({
         type: "offer",
-        sdp: content.content,
-      });
+        sdp: content.content
+      }));
 
-      const answer = await remotePeerConnection!.createAnswer();
-      await remotePeerConnection!.setLocalDescription(answer);
+      // 创建并设置本地答复
+      const answer = await localPeerConnection!.createAnswer();
+      await localPeerConnection!.setLocalDescription(answer);
+
+      // 发送答复
       wsClient.send({
         type: "webrtc",
         content: {
           receiverId: content.receiverId,
-          senderName: userInfo?.nickname || userInfo?.username || "未知用户",
           content: answer.sdp,
           sdpType: "answer",
         },
       });
+    } catch (error) {
+      console.error("处理 offer 失败:", error);
     }
   };
   const handleAnswer = async (content: WebRTCContent) => {
@@ -107,16 +114,28 @@
     console.log(wsClient);
     userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
     userId = userInfo?.id || 0;
-    localPeerConnection = new RTCPeerConnection({ iceServers: iceServers });
-    remotePeerConnection = new RTCPeerConnection({ iceServers: iceServers });
+    
+    // 只创建一个 PeerConnection
+    localPeerConnection = new RTCPeerConnection({ 
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }] 
+    });
 
-    localPeerConnection!.onicecandidate =(event) => {
-      if (event.candidate) {
+    // 设置远程流处理
+    localPeerConnection.ontrack = (event) => {
+      console.log("收到远程流:", event.streams[0]);
+      remoteStream = event.streams[0];
+      if (remoteVideo) {
+        remoteVideo.srcObject = remoteStream;
+      }
+    };
+
+    // 处理 ICE 候选
+    localPeerConnection.onicecandidate = (event) => {
+      if (event.candidate && currentContact) {
         wsClient.send({
           type: "webrtc",
           content: {
-            receiverId: currentContact?.id,
-            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+            receiverId: currentContact.id,
             content: JSON.stringify(event.candidate),
             sdpType: "candidate",
           },
@@ -315,30 +334,24 @@
   // 初始化 WebRTC
   async function initWebRTC(video: boolean, audio: boolean) {
     try {
+      // 获取本地媒体流
       localStream = await navigator.mediaDevices.getUserMedia({
         video,
         audio,
       });
 
-      // 等待 DOM 更新后设置视频源
-      await tick();
+      // 设置本地视频
       if (localVideo) {
         localVideo.srcObject = localStream;
       }
 
-      console.log("localStream", localStream);
-      console.log("localVideo", localVideo);
-      // 添加本地流
-      localStream.getTracks().forEach((track) => {
-        localPeerConnection!.addTrack(track, localStream!);
+      // 添加本地流轨道到 PeerConnection
+      localStream.getTracks().forEach(track => {
+        if (localPeerConnection) {
+          localPeerConnection.addTrack(track, localStream!);
+        }
       });
 
-      // 处理远程流
-      remotePeerConnection!.ontrack = (event) => {
-        remoteStream = event.streams[0];
-        remoteVideo!.srcObject = remoteStream;
-        console.log("remoteVideo", remoteVideo);
-      };
     } catch (error) {
       console.error("WebRTC 初始化失败:", error);
     }
@@ -414,8 +427,6 @@
   function endCall() {
     localStream?.getTracks().forEach((track) => track.stop());
     localPeerConnection?.close();
-    remotePeerConnection?.close();
-    localStream = null;
     remoteStream = null;
     isVideoCall = false;
   }
@@ -438,7 +449,6 @@
     wsClient.close();
     localStream?.getTracks().forEach((track) => track.stop());
     localPeerConnection?.close();
-    remotePeerConnection?.close();
   });
 </script>
 
