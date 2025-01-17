@@ -72,31 +72,29 @@
     }));
     const answer = await remotePeerConnection!.createAnswer();
     await remotePeerConnection!.setLocalDescription(answer);
+
+  }
+  const getDescriptionByOffer = async (offer: RTCSessionDescription) => {
+    await localPeerConnection!.setLocalDescription(offer);
+    await remotePeerConnection!.setRemoteDescription(offer);
+    const answer = await localPeerConnection!.createAnswer();
     wsClient.send({
       type: "webrtc",
       content: {
-        receiverId: content.receiverId,
+        receiverId: userId,
         senderName: userInfo?.nickname || userInfo?.username || "未知用户",
         content: answer.sdp,
         sdpType: "answer",
-        callType: content.callType,
+        callType: "video",
       },
     });
   }
-
-  const handleAnswer = async (content: WebRTCContent) => {
-    console.log("handleAnswer:", content);
-    console.log(localPeerConnection);
-    await localPeerConnection!.setRemoteDescription(new RTCSessionDescription({
-      type: "answer",
-      sdp: content.content,
-    }));
+  const getDescriptionByAnswer = async (answer: RTCSessionDescription) => {
+    await remotePeerConnection!.setLocalDescription(answer);
+    const offer = await remotePeerConnection!.createOffer();
+    await localPeerConnection!.setRemoteDescription(offer);
   }
 
-  const handleCandidate = async (content: WebRTCContent) => {
-    console.log("handleCandidate:", content);
-    await localPeerConnection!.addIceCandidate(new RTCIceCandidate({candidate:content.content}));
-  } 
 
   onMount(async () => {
     console.log(wsClient);
@@ -170,13 +168,19 @@
             const rtc_type = (message.content as WebRTCContent).sdpType;
             switch(rtc_type){
               case "offer":
-                await handleOffer(message.content as WebRTCContent);
+                await getDescriptionByOffer(new RTCSessionDescription({
+                  type: "offer",
+                  sdp: (message.content as WebRTCContent).content,
+                }));
                 break;
               case "answer":
-                await handleAnswer(message.content as WebRTCContent);
+                await getDescriptionByAnswer(new RTCSessionDescription({
+                  type: "answer",
+                  sdp: (message.content as WebRTCContent).content,
+                }));
                 break;
               case "candidate":
-                await handleCandidate(message.content as WebRTCContent);
+                // await handleCandidate(message.content as WebRTCContent);
                 break;
             }
             break;
