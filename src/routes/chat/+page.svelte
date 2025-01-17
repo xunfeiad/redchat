@@ -105,6 +105,10 @@
     remotePeerConnection!.onicecandidate = async (event) => {
       await localPeerConnection!.addIceCandidate(event.candidate);
     };
+
+    localPeerConnection!.onicecandidate = async (event) => {
+      await remotePeerConnection!.addIceCandidate(event.candidate);
+    };
     
     wsClient.connect();
     // 订阅 wsState 的变化
@@ -341,7 +345,6 @@
     // 创建并发送 offer
     const offer = await localPeerConnection!.createOffer();
     await localPeerConnection!.setLocalDescription(offer);
-    await remotePeerConnection!.setRemoteDescription(offer);
     wsClient.send({
       type: "webrtc",
       content: {
