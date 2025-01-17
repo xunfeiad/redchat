@@ -44,7 +44,6 @@
       
     }
     isLoading = false;
-    console.log(response);
   }
 </script>
 

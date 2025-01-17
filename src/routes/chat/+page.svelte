@@ -30,7 +30,10 @@
   // WebRTC 相关状态
   let localStream: MediaStream | null = $state(null);
   let remoteStream: MediaStream | null = $state(null);
-  let peerConnection: RTCPeerConnection | null = $state(null);
+  const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+
+  let localPeerConnection: RTCPeerConnection;
+  let remotePeerConnection: RTCPeerConnection;
 
   // 视频元素引用
   let localVideo: HTMLVideoElement | null = null;
@@ -59,13 +62,64 @@
       errorMessage = "加载联系人失败";
     }
   };
+
+
+  const handleOffer = async (content: WebRTCContent) => {
+    console.log("handleOffer");
+    await remotePeerConnection.setRemoteDescription(new RTCSessionDescription({
+      type: "offer",
+      sdp: content.content,
+    }));
+    const answer = await remotePeerConnection!.createAnswer();
+    await remotePeerConnection!.setLocalDescription(answer);
+    wsClient.send({
+      type: "webrtc",
+      content: {
+        receiverId: content.receiverId,
+        senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+        content: answer.sdp,
+        sdp_type: "answer",
+        callType: content.callType,
+      },
+    });
+  }
+
+  const handleAnswer = async (content: WebRTCContent) => {
+    console.log("handleAnswer");
+    await localPeerConnection!.setRemoteDescription(new RTCSessionDescription({
+      type: "answer",
+      sdp: content.content,
+    }));
+    await remotePeerConnection!.setLocalDescription(new RTCSessionDescription({
+      type: "answer",
+      sdp: content.content,
+    }));
+  } 
+
+  const handleCandidate = async (content: WebRTCContent) => {
+    console.log("handleCandidate");
+    localPeerConnection!.addIceCandidate(new RTCIceCandidate({candidate:content.content}));
+  } 
+
+  const get_other_pc = (pc: RTCPeerConnection) => {
+    return pc === localPeerConnection ? remotePeerConnection : localPeerConnection;
+  }
+
   onMount(async () => {
     console.log(wsClient);
     userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
     userId = userInfo?.id || 0;
-    
     localVideo = document.createElement("video");
     remoteVideo = document.createElement("video");
+    localPeerConnection = new RTCPeerConnection({iceServers:iceServers});
+    remotePeerConnection = new RTCPeerConnection({iceServers:iceServers});
+
+    localPeerConnection.onicecandidate = async (event) => {
+      await get_other_pc(localPeerConnection).addIceCandidate(event.candidate);
+    };
+    remotePeerConnection.onicecandidate = async (event) => {
+      await get_other_pc(remotePeerConnection).addIceCandidate(event.candidate);
+    };
     wsClient.connect();
     // 订阅 wsState 的变化
     wsStatus.subscribe((state) => {
@@ -109,30 +163,29 @@
           case "auth":
             const authUserId = (message.content as AuthContent).userId;
             contacts = contacts.map(contact => contact.id === authUserId ? { ...contact, online: true } : contact);
-
-
             break;
           case "webrtc":
-            console.log("---------------------");
-            console.log("webrtc", message);
-            console.log((message.content as WebRTCContent).callType);
-            console.log("---------------------");
             showIncomingCall = true;
-            // todo
             callerName = (message.content as WebRTCContent).senderName || "未知用户";
-            callType = (message.content as WebRTCContent).callType;
-            if(callType === "video"){
-              await initWebRTC(true, true);
-            }else{
-              await initWebRTC(false, true);
-            }
-
             let audioPlayer = document.getElementById('remoteContactRemind') as HTMLAudioElement;
             audioPlayer.addEventListener('ended', () => {
               audioPlayer.currentTime = 0;
               audioPlayer.play();
             });
-            audioPlayer.play();
+            audioPlayer.play(); 
+
+            const rtc_type = (message.content as WebRTCContent).sdp_type;
+            switch(rtc_type){
+              case "offer":
+                handleOffer(message.content as WebRTCContent);
+                break;
+              case "answer":
+                handleAnswer(message.content as WebRTCContent);
+                break;
+              case "candidate":
+                handleCandidate(message.content as WebRTCContent);
+                break;
+            }
             break;
           case "disconnect":
             console.log("remote user disconnected.", message);
@@ -253,17 +306,18 @@
       });
       localVideo!.srcObject = localStream;
 
-      peerConnection = new RTCPeerConnection({
+      localPeerConnection = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
 
       // 添加本地流
       localStream.getTracks().forEach((track) => {
-        peerConnection!.addTrack(track, localStream!);
+        localPeerConnection!.addTrack(track, localStream!);
       });
 
+      
       // 处理远程流
-      peerConnection.ontrack = (event) => {
+      remotePeerConnection!.ontrack = (event) => {
         remoteStream = event.streams[0];
         remoteVideo!.srcObject = remoteStream;
       };
@@ -272,14 +326,15 @@
     }
   }
 
+
   // 开始视频通话
   async function startVideoCall() {
     if (!currentContact) return;
     await initWebRTC(true, true);
 
     // 创建并发送 offer
-    const offer = await peerConnection!.createOffer();
-    await peerConnection!.setLocalDescription(offer);
+    const offer = await localPeerConnection!.createOffer();
+    await localPeerConnection!.setLocalDescription(offer);
 
     // 通过 WebSocket 发送 offer
     wsClient.send({
@@ -287,7 +342,8 @@
       content: {
         receiverId: currentContact.id,
         senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-        sdp: offer.sdp,
+        content: offer.sdp,
+        sdp_type: "offer",
         callType: "video",
       },
     });
@@ -302,17 +358,15 @@
     localStream?.getVideoTracks().forEach((track) => (track.enabled = false));
 
     // 创建并发送 offer
-    const offer = await peerConnection!.createOffer();
-    await peerConnection!.setLocalDescription(offer);
-    console.log("----------voice-------");
-    console.log(userInfo);
-    console.log("---------voice--------");
+    const offer = await localPeerConnection!.createOffer();
+    await localPeerConnection!.setLocalDescription(offer);
     wsClient.send({
       type: "webrtc",
       content: {
         receiverId: currentContact.id,
         senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-        sdp: offer.sdp,
+        content: offer.sdp,
+        sdp_type: "offer",
         callType: "voice",
       },
     });

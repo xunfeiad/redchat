@@ -1,10 +1,10 @@
 use actix_ws::Session;
 use bytestring::ByteString;
 use crate::{Message, AppState};
-use sea_orm::{ActiveValue::Set, ActiveModelTrait, EntityTrait};
+use sea_orm::{prelude::Expr, EntityTrait, QueryFilter, ColumnTrait};
 use error::{Error as CusError, Response, Result};
 use anyhow::Context;
-use entity::user::{self, ActiveModel, Entity as User};
+use entity::user::{Entity as User, Column as UserColumn};
 pub async fn handle_message(text: ByteString, state: &AppState, mut session: Session, user_id: i32) -> Result<(), CusError> {
     let message_data: Message = serde_json::from_str(&text)?;
                     match message_data {
@@ -14,10 +14,7 @@ pub async fn handle_message(text: ByteString, state: &AppState, mut session: Ses
                                 .add_session(auth_message.user_id, session.clone())
                                 .await;
                             println!("认证成功: {:?}, session_ids: {:?}", auth_message.user_id, state.user_connections.get_session_ids().await);
-                            let user = User::find_by_id(auth_message.user_id).one(&state.db).await?.ok_or(CusError::CustomError("用户不存在"))?;
-                            let mut user: ActiveModel = user.into();
-                            user.online = Set(true);
-                            user.update(&state.db).await?;
+                            User::update_many().col_expr(UserColumn::Online, Expr::value(true)).filter(UserColumn::Id.eq(auth_message.user_id)).exec(&state.db).await?;
                             session.text(serde_json::to_string(&Response::success_with_string("认证成功")).unwrap()).await.context("认证失败")?;
                             state.user_connections.find_session_and_send_message(None, &Message::Auth(auth_message), Some(user_id), Some(state.db.clone())).await?;
                         },

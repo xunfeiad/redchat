@@ -6,6 +6,7 @@ use std::time::Duration;
 
 pub async fn get_db() -> Result<DatabaseConnection> {
     let database_url = std::env::var("DATABASE_URL").unwrap();
+    println!("database_url: {}", database_url);
     let mut opt = ConnectOptions::new(database_url);
     opt.max_connections(100)
         .min_connections(5)
@@ -21,3 +22,5 @@ pub async fn get_db() -> Result<DatabaseConnection> {
         .await?;
     Ok(db)
 }
+
+

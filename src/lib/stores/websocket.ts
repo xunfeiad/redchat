@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import type { UserId, WebSocketMessage, TextContent, AuthContent, WebRTCContent, UserInfo } from '../../../types';
 import {goto} from '$app/navigation';
 export const wsStatus = writable<'connecting' | 'open' | 'closed'>('closed');
@@ -18,25 +18,31 @@ class WebSocketClient {
   constructor(url: string) {
     this.url = url;
   }
+  getUserInfo(){
+    const userInfo: UserInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+    if(!userInfo.id){
+      goto('/login');
+      return;
+    }
+    return userInfo;
+  }
 
   connect() {
     try {
       let url = this.url;
-      const userInfo: UserInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-      if(!userInfo.id){
-        goto('/login');
-        return;
-      }
+      const userInfo: UserInfo | undefined = this.getUserInfo();
       const params = {
-        userId: userInfo.id.toString(),
+        userId: userInfo?.id.toString() || '',
       };
       const paramsString = new URLSearchParams(params).toString();
       url = url + '?' + paramsString;
       this.ws = new WebSocket(url);
       wsStatus.set('connecting');
-
       this.ws.onopen = () => {
         console.log('WebSocket 连接成功');
+        if (get(wsStatus) === 'open') {
+          return;
+        }
         wsStatus.set('open');
         this.reconnectAttempts = 0;
       };
@@ -62,9 +68,18 @@ class WebSocketClient {
 
   private reconnect() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      const userInfo: UserInfo | undefined = this.getUserInfo();
       this.reconnectAttempts++;
       console.log(`尝试重新连接... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-      setTimeout(() => this.connect(), this.reconnectTimeout);
+      setTimeout(() =>{
+        this.connect();
+        this.send({
+          type: 'auth',
+          authMessage: {
+            user_id: userInfo?.id.toString() || '',
+          },
+        });
+      }, this.reconnectTimeout);
     }
   }
 
@@ -77,8 +92,8 @@ class WebSocketClient {
   }
 
   close() {
-    this.ws?.close(1000, 'close');
+    this.ws?.close();
   }
 }
 
-export const wsClient = new WebSocketClient('ws://192.168.1.4:8080/ws'); 
+export const wsClient = new WebSocketClient('ws://192.168.1.31:8080/ws'); 

@@ -4,14 +4,13 @@ use std::collections::HashMap;
 use actix_web::{rt, web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_ws::{AggregatedMessage, Session};
 use error::{Error as CusError, Result};
-use futures_util::stream::Filter;
 use futures_util::StreamExt as _;
 use handle_stream::handle_message;
-use sea_orm::{EntityTrait, ActiveModelTrait, Set, DatabaseConnection, QueryFilter, ColumnTrait};
+use sea_orm::{EntityTrait, DatabaseConnection, QueryFilter, ColumnTrait, prelude::Expr};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use std::sync::Arc;
-use entity::user::{Entity as User, ActiveModel};
+use entity::user::{Entity as User, Column as UserColumn};
 use entity::user_friend::{Entity as UserFriend, Column as UserFriendColumn};
 use anyhow::Context;
 #[derive(Default)]
@@ -45,8 +44,9 @@ pub struct WebRTCMessage {
     pub receiver_id: Option<i32>,
     pub group_id: Option<i32>,
     pub sender_name: Option<String>,
-    pub sdp: String,
-    pub call_type: String,
+    pub content: String,
+    pub sdp_type: String,
+    pub call_type: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -73,6 +73,7 @@ pub const AUTH_TYPE: &str = "auth";
 pub const TEXT_TYPE: &str = "text";
 
 
+
 impl UserConnections {
     pub fn new() -> Self {
         Self(RwLock::new(HashMap::new()))
@@ -80,11 +81,13 @@ impl UserConnections {
 
     pub async fn add_session(&self, user_id: UserId, session: Session) {
         let mut map = self.0.write().await;
+        println!("add session: {:?}", user_id);
         (*map).insert(user_id, session);
     }
 
     pub async fn remove_session(&self, user_id: UserId) {
         let mut map = self.0.write().await;
+        println!("remove_session: {:?}", user_id);
         (*map).remove(&user_id);
     }
 
@@ -118,7 +121,7 @@ impl UserConnections {
                 match skip_user_id {
                     Some(skip_user_id) => {
                         let notify_user_ids = UserFriend::find().filter(UserFriendColumn::UserId.eq(skip_user_id)).filter(UserFriendColumn::Status.eq(2)).all(db.as_ref().unwrap()).await?.into_iter().map(|user| user.friend_id).collect::<Vec<i32>>();
-                        println!("skip_user_id: {:?}, notify_user_ids: {:?}", skip_user_id, notify_user_ids);
+                        println!("skip_user_id: {:?}, notify_user_ids: {:?}, message: {:?}", skip_user_id, notify_user_ids, message);
                         for (key, value) in map.iter_mut() {
                             if notify_user_ids.contains(key){
                                 value.text(serde_json::to_string(message)?).await.context("send message error")?;
@@ -167,23 +170,13 @@ async fn echo(
                 }
                 Ok(AggregatedMessage::Close(Some(_))) => {
                     println!("user disconnected: user_id: {}", user_id);
-                    let user = User::find_by_id(user_id).one(&state.db).await;
-                    match user {
-                        Ok(user) => {
-                            let user = user.unwrap();
-                            println!("user: {:?}", user);
-                            let mut user: ActiveModel = user.into();
-                            user.online = Set(false);
-                            user.update(&state.db).await.unwrap();
-                        }
-                        Err(_) => {
-                            println!("user not found: user_id: {}", user_id);
-                        }
-                    }
+                    state.user_connections.remove_session(user_id).await;
+                    if let Err(e) =User::update_many().col_expr(UserColumn::Online, Expr::value(false)).filter(UserColumn::Id.eq(user_id)).exec(&state.db).await{
+                        println!("update user online error: {}", e);
+                    };
                     if let Err(e) = state.user_connections.find_session_and_send_message(None, &Message::Disconnect(DisconnectMessage { user_id: user_id }), Some(user_id), Some(state.db.clone())).await {
                         println!("send disconnect signal error: {}", e);
-                    }
-                    state.user_connections.remove_session(user_id).await;
+                    };
                 }
 
                 _ => {}
