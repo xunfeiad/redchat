@@ -66,12 +66,10 @@
 
   const handleOffer = async (content: WebRTCContent) => {
     if (content.content) {
-      remotePeerConnection!.setRemoteDescription(
-        new RTCSessionDescription({
-          type: "offer",
-          sdp: content.content,
-        }),
-      );
+      remotePeerConnection!.setRemoteDescription({
+        type: "offer",
+        sdp: content.content,
+      });
       const answer = await remotePeerConnection!.createAnswer();
       await remotePeerConnection!.setLocalDescription(answer);
       wsClient.send({
@@ -88,12 +86,10 @@
   const handleAnswer = async (content: WebRTCContent) => {
     console.log("handleAnswer", content);
     if (content.content) {
-      localPeerConnection!.setRemoteDescription(
-        new RTCSessionDescription({
-          type: "answer",
-          sdp: content.content,
-        }),
-      );
+      localPeerConnection!.setRemoteDescription({
+        type: "answer",
+        sdp: content.content,
+      });
     }
   };
   const handleCandidate = async (content: WebRTCContent) => {
