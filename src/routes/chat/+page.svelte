@@ -114,14 +114,14 @@
     localPeerConnection = new RTCPeerConnection({ iceServers: iceServers });
     remotePeerConnection = new RTCPeerConnection({ iceServers: iceServers });
 
-    localPeerConnection!.onicecandidate =(event) => {
+    localPeerConnection!.onicecandidate = async (event) => {
       if (event.candidate) {
-        remotePeerConnection!.addIceCandidate(event.candidate);
+        await remotePeerConnection!.addIceCandidate(event.candidate);
       }
     };
-    remotePeerConnection!.onicecandidate = (event) => {
+    remotePeerConnection!.onicecandidate = async (event) => {
       if (event.candidate) {
-        localPeerConnection!.addIceCandidate(event.candidate);
+        await localPeerConnection!.addIceCandidate(event.candidate);
       }
     };
 
