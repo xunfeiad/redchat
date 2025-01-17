@@ -85,7 +85,7 @@
   }
 
   const handleAnswer = async (content: WebRTCContent) => {
-    console.log("handleAnswer");
+    console.log("handleAnswer:", content);
     await localPeerConnection!.setRemoteDescription(new RTCSessionDescription({
       type: "answer",
       sdp: content.content,
@@ -93,13 +93,9 @@
   } 
 
   const handleCandidate = async (content: WebRTCContent) => {
-    console.log("handleCandidate");
+    console.log("handleCandidate:", content);
     localPeerConnection!.addIceCandidate(new RTCIceCandidate({candidate:content.content}));
   } 
-
-  const get_other_pc = (pc: RTCPeerConnection) => {
-    return pc === localPeerConnection ? remotePeerConnection : localPeerConnection;
-  }
 
   onMount(async () => {
     console.log(wsClient);
@@ -171,13 +167,13 @@
             const rtc_type = (message.content as WebRTCContent).sdpType;
             switch(rtc_type){
               case "offer":
-                handleOffer(message.content as WebRTCContent);
+                await handleOffer(message.content as WebRTCContent);
                 break;
               case "answer":
-                handleAnswer(message.content as WebRTCContent);
+                await handleAnswer(message.content as WebRTCContent);
                 break;
               case "candidate":
-                handleCandidate(message.content as WebRTCContent);
+                await handleCandidate(message.content as WebRTCContent);
                 break;
             }
             break;
