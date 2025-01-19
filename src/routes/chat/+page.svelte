@@ -95,8 +95,8 @@
     }
   };
   const handleCandidate = async (content: WebRTCContent) => {
-    const candidate = JSON.parse(content.content);
-    if (candidate.candidate) {
+    if(content.content){
+      const candidate = JSON.parse(content.content);
       await localPeerConnection!.addIceCandidate(new RTCIceCandidate(candidate));
     }
   };
@@ -332,6 +332,7 @@
 
       console.log("localStream", localStream);
       console.log("localVideo", localVideo);
+      console.log("localPeerConnection", localPeerConnection);
       // 添加本地流
       localStream.getTracks().forEach((track) => {
         localPeerConnection!.addTrack(track, localStream!);
