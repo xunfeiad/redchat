@@ -84,9 +84,8 @@
       });
     }
   };
+
   const handleAnswer = async (content: WebRTCContent) => {
-    console.log("localPeerConnection", localPeerConnection);
-    console.log("remotePeerConnection", remotePeerConnection);
     console.log("handleAnswer", content);
     if (content.content) {
       await localPeerConnection!.setRemoteDescription({
@@ -96,14 +95,9 @@
     }
   };
   const handleCandidate = async (content: WebRTCContent) => {
-    console.log("handleCandidate", content.content);
     const candidate = JSON.parse(content.content);
     if (candidate.candidate) {
-      if (content.candidateType === "local") {
-        await remotePeerConnection!.addIceCandidate(candidate);
-      } else {
-        await localPeerConnection!.addIceCandidate(candidate);
-      }
+      await localPeerConnection!.addIceCandidate(new RTCIceCandidate(candidate));
     }
   };
 
@@ -114,14 +108,20 @@
     localPeerConnection = new RTCPeerConnection({ iceServers: iceServers });
     remotePeerConnection = new RTCPeerConnection({ iceServers: iceServers });
 
-    localPeerConnection!.onicecandidate = async (event) => {
-      if (event.candidate) {
-        await remotePeerConnection!.addIceCandidate(event.candidate);
-      }
+    localPeerConnection!.onicecandidate =(event) => {
+      wsClient.send({
+        type: "webrtc",
+        content: {
+          receiverId: currentContact?.id,
+          senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+          content: JSON.stringify(event.candidate),
+          sdpType: "candidate",
+        },
+      });
     };
-    remotePeerConnection!.onicecandidate = async (event) => {
+    remotePeerConnection!.onicecandidate = (event) => {
       if (event.candidate) {
-        await localPeerConnection!.addIceCandidate(event.candidate);
+        localPeerConnection!.addIceCandidate(new RTCIceCandidate(event.candidate));
       }
     };
 
@@ -193,6 +193,8 @@
                 await handleOffer(message.content as WebRTCContent);
                 break;
               case "answer":
+                console.log("localPeerConnection", localPeerConnection);
+                console.log("remotePeerConnection", remotePeerConnection);
                 await handleAnswer(message.content as WebRTCContent);
                 break;
               case "candidate":
