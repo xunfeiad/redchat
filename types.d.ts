@@ -23,10 +23,10 @@ export interface AuthContent {
 export interface WebRTCContent {
     receiverId?: number;
     senderName?: string;
+    senderId: number;
     callType?: "video" | "voice";
     sdpType: "offer" | "answer" | "candidate";
     content: string;
-    sid: number;
 }
 
 export interface DisconnectContent {

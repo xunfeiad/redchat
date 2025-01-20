@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import type {
     Response,
@@ -102,44 +102,43 @@
     remoteVideo = newRemoteStreamElem;
   }
 
-  async function sendAnswer(sid: number){
+  async function sendAnswer(senderId: number){
     console.log('Send answer');
-    const answer = await peers.get(sid)?.createAnswer();
+    const answer = await peers.get(senderId)?.createAnswer();
     try{
       if(answer){
-        await setAndSendLocalDescription(sid, answer);
+        await setAndSendLocalDescription(answer, senderId);
       }
     }catch(error){
       console.error('Send answer failed: ', error);
     }
   }
 
-  async function setAndSendLocalDescription(sid: number, sdp: RTCSessionDescriptionInit){
-    peers.get(sid)?.setLocalDescription(sdp);
+  async function setAndSendLocalDescription(sdp: RTCSessionDescriptionInit, receivedId: number){
+    peers.get(userId)?.setLocalDescription(sdp);
     console.log('Local description set');
     wsClient.send({
         type: 'webrtc',
         content: {
-            receiverId: currentContact?.id || sid,
+            receiverId: currentContact?.id,
             senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+            senderId: userId,
             content: sdp.sdp,
             sdpType: sdp.type,
-            sid: sid
         }
     });
   }
 
-  async function addPendingCandidates(sid: number){
+  async function addPendingCandidates(senderId: number){
     console.log('addPendingCandidates', peedingCandidates);
-    if (peedingCandidates.has(sid)) {
-        peedingCandidates.get(sid)?.forEach(async candidate => {
-            await peers.get(sid)?.addIceCandidate(new RTCIceCandidate(candidate))
+    if (peedingCandidates.has(senderId)) {
+        peedingCandidates.get(senderId)?.forEach(async candidate => {
+            await peers.get(senderId)?.addIceCandidate(new RTCIceCandidate(candidate))
         });
     }
   }
 
   async function handleSignalingMessage(message: WebRTCContent){
-    const sid = message.sid;
     switch (message.sdpType) {
         case 'offer':
             const peer = await createPeerConnection();
@@ -148,12 +147,12 @@
               type: message.sdpType,
               sdp: message.content,
             }));
-            await sendAnswer(userId);
-            await addPendingCandidates(userId);
-            console.log('peedingCandidates', peedingCandidates);
+            await sendAnswer(message.senderId);
+            await addPendingCandidates(message.senderId);
             break;
         case 'answer':
-            await peers.get(sid)?.setRemoteDescription(new RTCSessionDescription({
+            console.log('answer', userId);
+            await peers.get(message.senderId)?.setRemoteDescription(new RTCSessionDescription({
               type: message.sdpType,
               sdp: message.content,
             }));
@@ -161,13 +160,13 @@
         case 'candidate':
             if(message.content){
               const candidate = JSON.parse(message.content);
-              if (sid in peers) {
-                  await peers.get(sid)?.addIceCandidate(new RTCIceCandidate(candidate));
+              if (message.senderId in peers) {
+                  await peers.get(message.senderId)?.addIceCandidate(new RTCIceCandidate(candidate));
               } else {
-                if (!(sid in peedingCandidates)) {
-                  peedingCandidates.set(sid, []);
+                if (!(message.senderId in peedingCandidates)) {
+                  peedingCandidates.set(message.senderId, []);
                 }
-                peedingCandidates.get(sid)?.push(candidate)
+                peedingCandidates.get(message.senderId)?.push(candidate)
             }
             break;
     }
