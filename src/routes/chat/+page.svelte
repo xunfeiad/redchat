@@ -70,11 +70,14 @@
       video,
       audio,
     });
+    await tick();
+    if (localStream) {
+    localVideo!.srcObject = localStream; // 将流绑定到 localVideo 上
+  }
   }
 
   async function createPeerConnection() {
-    const peer = new RTCPeerConnection({     iceServers: [],
-      iceTransportPolicy: 'relay' });
+    const peer = new RTCPeerConnection({ iceServers});
     peer.onicecandidate = onIceCandidate;
     peer.ontrack = onAddStream;
     localStream?.getTracks().forEach((track) => {
@@ -92,15 +95,23 @@
     return peer;
   }
 
-  function onAddStream(event: RTCTrackEvent) {
+  async function onAddStream(event: RTCTrackEvent) {
     console.log("Add stream");
-    remoteVideo!.srcObject = event.streams[0];
+    await tick();
+    if (remoteVideo) {
+      remoteVideo!.srcObject = event.streams[0];
+    }
   }
 
   function onIceCandidate(
     event: RTCPeerConnectionIceEvent,
   ) {
+    const sid = currentContact?.id || remoteUserId;
+    if (sid == 0){
+      throw new Error("sid is 0");
+    }
     if (event.candidate && remoteUserId) {
+      console.log("candidate exchange......", remoteUserId);
       wsClient.send({
         type: "webrtc",
         content: {
@@ -156,12 +167,13 @@
 
   async function addPendingCandidates(id: number) {
     if (peedingCandidates.has(id)) {
-      console.log("addPendingCandidates", peedingCandidates.get(id));
       peedingCandidates.get(id)?.forEach(async (candidate) => {
         await peers
           .get(id)
           ?.addIceCandidate(candidate);
       });
+      console.log("addPendingCandidates", peedingCandidates.get(id));
+
     }
   }
 
@@ -180,11 +192,10 @@
         );
         await sendAnswer(remoteUserId);
         await addPendingCandidates(remoteUserId);
-        console.log("candidates", peedingCandidates);
         console.log(peers);
         break;
       case "answer":
-        console.log("answer", message.senderId);
+        console.log("answer", remoteUserId);
         console.log(peers);
         await peers.get(remoteUserId)?.setRemoteDescription(
           {
@@ -196,13 +207,13 @@
       case "candidate":
         if (message.content) {
           const candidate = JSON.parse(message.content);
-          if (message.senderId in peers) {
-            await peers.get(message.senderId)?.addIceCandidate(candidate);
+          if (remoteUserId in peers) {
+            await peers.get(remoteUserId)?.addIceCandidate(candidate);
           } else {
-            if (!(message.senderId in peedingCandidates)) {
-              peedingCandidates.set(message.senderId, []);
+            if (!(remoteUserId in peedingCandidates)) {
+              peedingCandidates.set(remoteUserId, []);
             }
-            peedingCandidates.get(message.senderId)?.push(candidate);
+            peedingCandidates.get(remoteUserId)?.push(candidate);
           }
           break;
         }
@@ -433,8 +444,6 @@
     ) as HTMLAudioElement;
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
-    await tick();
-    localVideo!.srcObject = localStream;
   }
 
   function endCall() {
