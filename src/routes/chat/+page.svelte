@@ -50,6 +50,8 @@
   // 是否是视频通话
   let isVideoCall = $state(false);
 
+  let remoteUserId: number = $state(0);
+
   const get_contacts = async () => {
     try {
       let res: Response<Contact[]> = await invoke("get_contacts", {
@@ -92,12 +94,12 @@
 
  function onIceCandidate(event: RTCPeerConnectionIceEvent){
     console.log('ICE candidate');
-
-    if (event.candidate) {
+    console.log('remoteUserId:', remoteUserId);
+    if (event.candidate && remoteUserId) {
           wsClient.send({
               type: 'webrtc',
               content: {
-                  receiverId: currentContact?.id,
+                  receiverId: remoteUserId,
                   senderName: userInfo?.nickname || userInfo?.username || "未知用户",
                   senderId: userId,
                   content: JSON.stringify(event.candidate),
@@ -156,6 +158,7 @@
 
   async function handleSignalingMessage(message: WebRTCContent){
     console.log('handleSignalingMessage', message);
+    remoteUserId = message.senderId;
     switch (message.sdpType) {
         case 'offer':
             const peer = await createPeerConnection();
