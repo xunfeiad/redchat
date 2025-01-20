@@ -68,7 +68,6 @@
       video,
       audio,
     });
-    wsClient.connect();
   }
 
   async function createPeerConnection(){
@@ -186,6 +185,7 @@
     console.log(wsClient);
     userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
     userId = userInfo?.id || 0;
+    wsClient.connect();
 
     // 订阅 wsState 的变化
     wsStatus.subscribe((state) => {
