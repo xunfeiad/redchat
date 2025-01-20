@@ -112,7 +112,7 @@
         wsClient.send({
           type: 'webrtc',
           content: {
-            receiverId: message.receiverId,
+            receiverId: message.senderId,
             senderName: userInfo?.nickname || userInfo?.username || "未知用户",
             senderId: userId,
             content: answer.sdp,
@@ -154,13 +154,15 @@
     switch (message.sdpType) {
         case 'offer':
             const peer = await createPeerConnection();
-            peers.set(message.senderId, peer);
-            await peers.get(message.senderId)?.setRemoteDescription(new RTCSessionDescription({
+            peers.set(userId, peer);
+            await peers.get(userId)?.setRemoteDescription(new RTCSessionDescription({
               type: message.sdpType,
               sdp: message.content,
             }));
             await sendAnswer(message);
-            await addPendingCandidates(message.senderId);
+            await addPendingCandidates(userId);
+            console.log('candidates', peedingCandidates);
+            console.log(peers)
             break;
         case 'answer':
             console.log('answer', message.senderId);
