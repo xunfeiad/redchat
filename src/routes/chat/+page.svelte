@@ -119,7 +119,7 @@
     wsClient.send({
         type: 'webrtc',
         content: {
-            receiverId: currentContact?.id,
+            receiverId: sid,
             senderName: userInfo?.nickname || userInfo?.username || "未知用户",
             content: sdp.sdp,
             sdpType: sdp.type,
