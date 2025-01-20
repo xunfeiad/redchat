@@ -103,7 +103,7 @@
   }
 
   async function sendAnswer(senderId: number){
-    console.log('Send answer');
+    console.log('Send answer', senderId);
     const answer = await peers.get(senderId)?.createAnswer();
     try{
       if(answer){
@@ -115,7 +115,7 @@
   }
 
   async function setAndSendLocalDescription(sdp: RTCSessionDescriptionInit, receivedId: number){
-    peers.get(userId)?.setLocalDescription(sdp);
+    peers.get(receivedId)?.setLocalDescription(sdp);
     console.log('Local description set');
     wsClient.send({
         type: 'webrtc',
@@ -139,11 +139,12 @@
   }
 
   async function handleSignalingMessage(message: WebRTCContent){
+    console.log('handleSignalingMessage', message);
     switch (message.sdpType) {
         case 'offer':
             const peer = await createPeerConnection();
-            peers.set(userId, peer);
-            await peers.get(userId)?.setRemoteDescription(new RTCSessionDescription({
+            peers.set(message.senderId, peer);
+            await peers.get(message.senderId)?.setRemoteDescription(new RTCSessionDescription({
               type: message.sdpType,
               sdp: message.content,
             }));
@@ -151,7 +152,7 @@
             await addPendingCandidates(message.senderId);
             break;
         case 'answer':
-            console.log('answer', userId);
+            console.log('answer', message.senderId);
             await peers.get(message.senderId)?.setRemoteDescription(new RTCSessionDescription({
               type: message.sdpType,
               sdp: message.content,
@@ -357,10 +358,10 @@
     }
   }
  
-  async function createOffer(sid: number){
-    const offer = await peers.get(sid)?.createOffer();
+  async function createOffer(senderId: number){
+    const offer = await peers.get(senderId)?.createOffer();
     if(offer){
-      await setAndSendLocalDescription(sid, offer);
+      await setAndSendLocalDescription(offer, senderId);
     }
   }
   // 开始视频通话
@@ -376,6 +377,9 @@
   async function startVoiceCall() {
     if (!currentContact) return;
     await getLocalStream(false, true);
+    peers.set(userId, await createPeerConnection());
+    await createOffer(userId);
+    addPendingCandidates(userId);
   }
 
   function handleRejectCall() {
