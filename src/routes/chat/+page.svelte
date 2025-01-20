@@ -154,13 +154,13 @@
     switch (message.sdpType) {
         case 'offer':
             const peer = await createPeerConnection();
-            peers.set(userId, peer);
-            await peers.get(userId)?.setRemoteDescription(new RTCSessionDescription({
+            peers.set(message.senderId, peer);
+            await peers.get(message.senderId)?.setRemoteDescription(new RTCSessionDescription({
               type: message.sdpType,
               sdp: message.content,
             }));
             await sendAnswer(message);
-            await addPendingCandidates(userId);
+            await addPendingCandidates(message.senderId);
             console.log('candidates', peedingCandidates);
             console.log(peers)
             break;
@@ -381,18 +381,18 @@
   async function startVideoCall() {
     if (!currentContact) return;
     await getLocalStream(true, true);
-    peers.set(userId, await createPeerConnection());
-    await createOffer(userId);
-    addPendingCandidates(userId);
+    peers.set(currentContact.id, await createPeerConnection());
+    await createOffer(currentContact.id);
+    addPendingCandidates(currentContact.id);
   }
 
   // 开始语音通话
   async function startVoiceCall() {
     if (!currentContact) return;
     await getLocalStream(false, true);
-    peers.set(userId, await createPeerConnection());
-    await createOffer(userId);
-    addPendingCandidates(userId);
+    peers.set(currentContact.id, await createPeerConnection());
+    await createOffer(currentContact.id);
+    addPendingCandidates(currentContact.id);
   }
 
   function handleRejectCall() {
