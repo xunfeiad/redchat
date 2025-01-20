@@ -68,14 +68,26 @@
       video,
       audio,
     });
-    localStream.addTrack(localStream.getTracks()[0]);
   }
 
   async function createPeerConnection(){
     const peer = new RTCPeerConnection({ iceServers: iceServers });
     peer.onicecandidate = onIceCandidate;
     peer.ontrack = onAddStream;
+    localStream?.getTracks().forEach(track => {
+      console.log('track:', track);
+      peer.addTrack(track);
+    });
     return peer;
+  }
+
+  function onAddStream(event: RTCTrackEvent){
+    console.log('Add stream');
+    const newRemoteStreamElem = document.createElement('video');
+    newRemoteStreamElem.autoplay = true;
+    newRemoteStreamElem.srcObject = event.streams[0];
+    remoteVideo = newRemoteStreamElem;
+    document.getElementById('videoContainer')?.appendChild(newRemoteStreamElem);
   }
 
  function onIceCandidate(event: RTCPeerConnectionIceEvent){
@@ -94,14 +106,6 @@
               }
           });
     }
-  }
-
-  function onAddStream(event: RTCTrackEvent){
-    console.log('Add stream');
-    const newRemoteStreamElem = document.createElement('video');
-    newRemoteStreamElem.autoplay = true;
-    newRemoteStreamElem.srcObject = event.streams[0];
-    remoteVideo = newRemoteStreamElem;
   }
 
   async function sendAnswer(message: WebRTCContent){
@@ -603,12 +607,12 @@
 
 {#if localStream}
   <div class="video-call-modal">
-    <div class="video-container">
-      <div class="video-wrapper remote" id="remoteVideo">
+    <div class="video-container" id="videoContainer">
+      <!-- <div class="video-wrapper remote" id="remoteVideo">
         <video bind:this={remoteVideo} autoplay playsinline>
           <track kind="captions" srclang="en" label="English" />
         </video>
-      </div>
+      </div> -->
 
       <div class="video-wrapper local" id="localVideo">
         <video bind:this={localVideo} autoplay playsinline>
