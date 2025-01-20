@@ -78,6 +78,10 @@
 
   async function createPeerConnection() {
     const peer = new RTCPeerConnection({ iceServers});
+    if(!localStream){
+      console.log("local stream is null, get local stream");
+      await getLocalStream(true, true);
+    }
     peer.onicecandidate = onIceCandidate;
     peer.ontrack = onAddStream;
     localStream?.getTracks().forEach((track) => {
@@ -207,6 +211,7 @@
       case "candidate":
         if (message.content) {
           const candidate = JSON.parse(message.content);
+          console.log(":::peer:::----->", peers);
           if (remoteUserId in peers) {
             await peers.get(remoteUserId)?.addIceCandidate(candidate);
           } else {
@@ -632,7 +637,7 @@
   </div>
 {/if}
 
-{#if localStream}
+{#if localStream && remoteVideo}
   <div class="video-call-modal">
     <div class="video-container" id="videoContainer">
       <div class="video-wrapper remote" id="remoteVideo">
