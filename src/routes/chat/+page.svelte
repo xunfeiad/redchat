@@ -86,6 +86,7 @@
               content: {
                   receiverId: currentContact?.id,
                   senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+                  senderId: userId,
                   content: JSON.stringify(event.candidate),
                   sdpType: "candidate",
                   sid: userId
