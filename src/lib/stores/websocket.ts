@@ -96,4 +96,4 @@ class WebSocketClient {
   }
 }
 
-export const wsClient = new WebSocketClient('ws://192.168.1.31:8080/ws'); 
+export const wsClient = new WebSocketClient('ws://192.168.1.4:8080/ws'); 

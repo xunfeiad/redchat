@@ -101,14 +101,6 @@
     remoteVideo = newRemoteStreamElem;
   }
 
-  async function addIceCandidate(id: number){
-    if (peedingCandidates.has(id)) {
-        peedingCandidates.get(id)?.forEach(candidate => {
-            peers.get(id)?.addIceCandidate(new RTCIceCandidate(candidate))
-        });
-    }
-  }
-
   async function sendAnswer(id: number){
     console.log('Send answer');
     const answer = await peers.get(id)?.createAnswer();
@@ -145,7 +137,6 @@
   }
 
   async function handleSignalingMessage(message: WebRTCContent){
-    console.log(message)
     const sid = message.sid;
     switch (message.sdpType) {
         case 'offer':
@@ -247,18 +238,8 @@
             });
             audioPlayer.play();
 
-            const rtc_type = (message.content as WebRTCContent).sdpType;
-            switch (rtc_type) {
-              case "offer":
-                await handleSignalingMessage(message.content as WebRTCContent);
-                break;
-              case "answer":
-                await handleSignalingMessage(message.content as WebRTCContent);
-                break;
-              case "candidate":
-                await handleSignalingMessage(message.content as WebRTCContent);
-                break;
-            }
+            const rtcContent = message.content as WebRTCContent;
+            await handleSignalingMessage(rtcContent);
             break;
           case "disconnect":
             console.log("remote user disconnected.", message);
@@ -403,6 +384,7 @@
     ) as HTMLAudioElement;
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
+    await getLocalStream(true, true);
   }
 
   function endCall() {
