@@ -70,37 +70,50 @@
     });
   }
 
-  async function createPeerConnection(){
+  async function createPeerConnection() {
     const peer = new RTCPeerConnection({ iceServers: iceServers });
-    peer.onicecandidate = onIceCandidate;
-    peer.ontrack = onAddStream;
+    
+    // 使用箭头函数来保持 this 上下文
+    peer.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
+      console.log('ICE candidate', event.candidate);
+      
+      if (event.candidate && currentContact) {
+        wsClient.send({
+          type: 'webrtc',
+          content: {
+            receiverId: currentContact.id,
+            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+            senderId: userId,
+            content: JSON.stringify(event.candidate),
+            sdpType: "candidate",
+            sid: userId
+          }
+        });
+      }
+    };
+
+    // 使用箭头函数来保持 this 上下文
+    peer.ontrack = (event: RTCTrackEvent) => {
+      console.log('Add stream', event.streams[0]);
+      if (remoteVideo) {
+        remoteVideo.srcObject = event.streams[0];
+      }
+    };
+
+    // 添加更多事件监听以便调试
+    peer.onconnectionstatechange = () => {
+      console.log('Connection state:', peer.connectionState);
+    };
+
+    peer.oniceconnectionstatechange = () => {
+      console.log('ICE connection state:', peer.iceConnectionState);
+    };
+
+    peer.onsignalingstatechange = () => {
+      console.log('Signaling state:', peer.signalingState);
+    };
+
     return peer;
-  }
-
- function onIceCandidate(event: RTCPeerConnectionIceEvent){
-    console.log('ICE candidate');
-
-    if (event.candidate) {
-          wsClient.send({
-              type: 'webrtc',
-              content: {
-                  receiverId: currentContact?.id,
-                  senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-                  senderId: userId,
-                  content: JSON.stringify(event.candidate),
-                  sdpType: "candidate",
-                  sid: userId
-              }
-          });
-    }
-  }
-
-  function onAddStream(event: RTCTrackEvent){
-    console.log('Add stream');
-    const newRemoteStreamElem = document.createElement('video');
-    newRemoteStreamElem.autoplay = true;
-    newRemoteStreamElem.srcObject = event.streams[0];
-    remoteVideo = newRemoteStreamElem;
   }
 
   async function sendAnswer(senderId: number){
