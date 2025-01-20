@@ -101,20 +101,20 @@
     remoteVideo = newRemoteStreamElem;
   }
 
-  async function sendAnswer(id: number){
+  async function sendAnswer(sid: number){
     console.log('Send answer');
-    const answer = await peers.get(id)?.createAnswer();
+    const answer = await peers.get(sid)?.createAnswer();
     try{
       if(answer){
-        await setAndSendLocalDescription(id, answer);
+        await setAndSendLocalDescription(sid, answer);
       }
     }catch(error){
       console.error('Send answer failed: ', error);
     }
   }
 
-  async function setAndSendLocalDescription(id: number, sdp: RTCSessionDescriptionInit){
-    peers.get(id)?.setLocalDescription(sdp);
+  async function setAndSendLocalDescription(sid: number, sdp: RTCSessionDescriptionInit){
+    peers.get(sid)?.setLocalDescription(sdp);
     console.log('Local description set');
     wsClient.send({
         type: 'webrtc',
@@ -355,11 +355,19 @@
     }
   }
  
-
+  async function createOffer(sid: number){
+    const offer = await peers.get(sid)?.createOffer();
+    if(offer){
+      await setAndSendLocalDescription(sid, offer);
+    }
+  }
   // 开始视频通话
   async function startVideoCall() {
     if (!currentContact) return;
     await getLocalStream(true, true);
+    peers.set(userId, await createPeerConnection());
+    createOffer(userId);
+    addPendingCandidates(userId);
   }
 
   // 开始语音通话
