@@ -70,8 +70,6 @@
       video,
       audio,
     });
-    localVideo!.srcObject = localStream;
-    await tick();
   }
 
   async function createPeerConnection() {
@@ -81,7 +79,7 @@
     peer.ontrack = onAddStream;
     localStream?.getTracks().forEach((track) => {
       console.log("track:", track);
-      peer.addTrack(track);
+      peer.addTrack(track, localStream!);
     });
     peer.oniceconnectionstatechange = () => {
       console.log("ICE connection state:", peer.iceConnectionState);
@@ -117,16 +115,15 @@
     }
   }
 
-  async function sendAnswer(message: WebRTCContent) {
-    console.log("Send answer", message.senderId);
-    const answer = await peers.get(message.senderId)?.createAnswer();
+  async function sendAnswer(id: number) {
+    const answer = await peers.get(id)?.createAnswer();
     try {
       if (answer) {
-        await peers.get(message.senderId)?.setLocalDescription(answer);
+        await peers.get(id)?.setLocalDescription(answer);
         wsClient.send({
           type: "webrtc",
           content: {
-            receiverId: message.senderId,
+            receiverId: id,
             senderName: userInfo?.nickname || userInfo?.username || "未知用户",
             senderId: userId,
             content: answer.sdp,
@@ -141,14 +138,14 @@
 
   async function setAndSendLocalDescription(
     sdp: RTCSessionDescriptionInit,
-    receivedId: number,
+    id: number,
   ) {
-    await peers.get(receivedId)?.setLocalDescription(sdp);
+    await peers.get(id)?.setLocalDescription(sdp);
     console.log("Local description set");
     wsClient.send({
       type: "webrtc",
       content: {
-        receiverId: currentContact?.id,
+        receiverId: remoteUserId,
         senderName: userInfo?.nickname || userInfo?.username || "未知用户",
         senderId: userId,
         content: sdp.sdp,
@@ -157,12 +154,12 @@
     });
   }
 
-  async function addPendingCandidates(senderId: number) {
+  async function addPendingCandidates(id: number) {
     console.log("addPendingCandidates", peedingCandidates);
-    if (peedingCandidates.has(senderId)) {
-      peedingCandidates.get(senderId)?.forEach(async (candidate) => {
+    if (peedingCandidates.has(id)) {
+      peedingCandidates.get(id)?.forEach(async (candidate) => {
         await peers
-          .get(senderId)
+          .get(id)
           ?.addIceCandidate(new RTCIceCandidate(candidate));
       });
     }
@@ -174,25 +171,26 @@
     switch (message.sdpType) {
       case "offer":
         const peer = await createPeerConnection();
-        peers.set(message.senderId, peer);
-        await peers.get(message.senderId)?.setRemoteDescription(
-          new RTCSessionDescription({
+        peers.set(remoteUserId, peer);
+        await peers.get(remoteUserId)?.setRemoteDescription(
+          {
             type: message.sdpType,
             sdp: message.content,
-          }),
+          }
         );
-        await sendAnswer(message);
-        await addPendingCandidates(message.senderId);
+        await sendAnswer(remoteUserId);
+        await addPendingCandidates(remoteUserId);
         console.log("candidates", peedingCandidates);
         console.log(peers);
         break;
       case "answer":
         console.log("answer", message.senderId);
-        await peers.get(message.senderId)?.setRemoteDescription(
-          new RTCSessionDescription({
+        console.log(peers);
+        await peers.get(remoteUserId)?.setRemoteDescription(
+          {
             type: message.sdpType,
             sdp: message.content,
-          }),
+          }
         );
         break;
       case "candidate":
@@ -395,10 +393,10 @@
     }
   }
 
-  async function createOffer(senderId: number) {
-    const offer = await peers.get(senderId)?.createOffer();
+  async function createOffer(id: number) {
+    const offer = await peers.get(id)?.createOffer();
     if (offer) {
-      await setAndSendLocalDescription(offer, senderId);
+      await setAndSendLocalDescription(offer, id);
     }
   }
   // 开始视频通话
@@ -435,7 +433,8 @@
     ) as HTMLAudioElement;
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
-    await getLocalStream(true, true);
+    await tick();
+    localVideo!.srcObject = localStream;
   }
 
   function endCall() {
