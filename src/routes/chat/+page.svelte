@@ -119,11 +119,11 @@
     wsClient.send({
         type: 'webrtc',
         content: {
-            receiverId: sid,
+            receiverId: currentContact?.id || sid,
             senderName: userInfo?.nickname || userInfo?.username || "未知用户",
             content: sdp.sdp,
             sdpType: sdp.type,
-            sid: userId
+            sid: sid
         }
     });
   }
