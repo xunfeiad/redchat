@@ -78,33 +78,77 @@
 
   async function createPeerConnection() {
     const peer = new RTCPeerConnection({ iceServers});
+    peer.onicecandidate = onIceCandidate;
+    peer.ontrack = onAddStream;
+    const tempUserId = currentContact?.id || remoteUserId;
+    console.log("tempUserId:", tempUserId);
+     // 在连接建立时，处理所有待处理的 ICE 候选
+  if (peedingCandidates.has(tempUserId)) {
+    const candidates = peedingCandidates.get(tempUserId);
+    if (candidates) {
+      for (const candidate of candidates) {
+        try {
+          await peer.addIceCandidate(candidate);
+        } catch (error) {
+          console.error("Error adding pending ICE candidate:", error);
+        }
+      }
+      // 清空已处理的候选
+      peedingCandidates.delete(tempUserId);
+    }
+  }
+    peer.oniceconnectionstatechange = () => {
+  console.log('ICE connection state:', peer.iceConnectionState);
+  switch(peer.iceConnectionState) {
+    case 'new':
+      console.log('ICE connection is new');
+      break;
+    case 'checking':
+      console.log('ICE connection is checking');
+      break;
+    case 'connected':
+      console.log('ICE connection is connected');
+      break;
+    case 'completed':
+      console.log('ICE connection is completed');
+      break;
+    case 'failed':
+      console.error('ICE connection failed');
+      break;
+    case 'disconnected':
+      console.log('ICE connection disconnected');
+      break;
+    case 'closed':
+      console.log('ICE connection closed');
+      break;
+    default:
+      console.log('ICE connection state unknown');
+  }
+};
     if(!localStream){
       console.log("local stream is null, get local stream");
       await getLocalStream(true, true);
     }
-    peer.onicecandidate = onIceCandidate;
-    peer.ontrack = onAddStream;
-    localStream?.getTracks().forEach((track) => {
-      console.log("track:", track);
-      peer.addTrack(track, localStream!);
-    });
-    peer.oniceconnectionstatechange = () => {
-      console.log("ICE connection state:", peer.iceConnectionState);
-      if (peer.iceConnectionState === "connected") {
-        console.log("ICE connection established");
-      } else if (peer.iceConnectionState === "failed") {
-        console.error("ICE connection failed");
-      }
-    };
+    if(localStream){
+      localStream?.getTracks().forEach((track) => {
+        console.log("track:", track);
+        peer.addTrack(track, localStream!);
+      });
+    }
     return peer;
   }
 
   async function onAddStream(event: RTCTrackEvent) {
     console.log("Add stream");
-    await tick();
-    if (remoteVideo) {
-      remoteVideo!.srcObject = event.streams[0];
-    }
+    tick().then(() => {
+      if (remoteVideo) {
+        console.log("remoteVideo:", remoteVideo);
+        remoteVideo!.srcObject = event.streams[0];
+      }
+    });
+    console.log("localVideo:", localVideo);
+    console.log("remoteVideo:", remoteVideo);
+    // remoteVideo!.srcObject = event.streams[0];
   }
 
   function onIceCandidate(
@@ -226,7 +270,7 @@
   }
 
   onMount(async () => {
-    localVideo = document.createElement("video");
+    localVideo = document.createElement("video") ;
     remoteVideo = document.createElement("video");
     userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
     userId = userInfo?.id || 0;
