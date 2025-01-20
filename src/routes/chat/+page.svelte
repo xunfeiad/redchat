@@ -68,6 +68,7 @@
       video,
       audio,
     });
+    localStream.addTrack(localStream.getTracks()[0]);
   }
 
   async function createPeerConnection(){
