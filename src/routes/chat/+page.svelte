@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import type {
     Response,
@@ -70,6 +70,7 @@
       video,
       audio,
     });
+    localVideo!.srcObject = localStream;
   }
 
   async function createPeerConnection(){
@@ -85,11 +86,8 @@
 
   function onAddStream(event: RTCTrackEvent){
     console.log('Add stream');
-    const newRemoteStreamElem = document.createElement('video');
-    newRemoteStreamElem.autoplay = true;
-    newRemoteStreamElem.srcObject = event.streams[0];
-    remoteVideo = newRemoteStreamElem;
-    document.getElementById('videoContainer')?.appendChild(newRemoteStreamElem);
+    remoteVideo!.autoplay = true;
+    remoteVideo!.srcObject = event.streams[0];
   }
 
  function onIceCandidate(event: RTCPeerConnectionIceEvent){
@@ -611,11 +609,11 @@
 {#if localStream}
   <div class="video-call-modal">
     <div class="video-container" id="videoContainer">
-      <!-- <div class="video-wrapper remote" id="remoteVideo">
+      <div class="video-wrapper remote" id="remoteVideo">
         <video bind:this={remoteVideo} autoplay playsinline>
           <track kind="captions" srclang="en" label="English" />
         </video>
-      </div> -->
+      </div>
 
       <div class="video-wrapper local" id="localVideo">
         <video bind:this={localVideo} autoplay playsinline>
