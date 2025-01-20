@@ -26,6 +26,7 @@ export interface WebRTCContent {
     callType?: "video" | "voice";
     sdpType: "offer" | "answer" | "candidate";
     content: string;
+    sid: number;
 }
 
 export interface DisconnectContent {
