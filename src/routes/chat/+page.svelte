@@ -77,9 +77,10 @@
     return peer;
   }
 
-  async function onIceCandidate(event: RTCPeerConnectionIceEvent){
+ function onIceCandidate(event: RTCPeerConnectionIceEvent){
+    console.log('ICE candidate');
+
     if (event.candidate) {
-        console.log('ICE candidate');
           wsClient.send({
               type: 'webrtc',
               content: {
@@ -93,7 +94,7 @@
     }
   }
 
-  async function onAddStream(event: RTCTrackEvent){
+  function onAddStream(event: RTCTrackEvent){
     console.log('Add stream');
     const newRemoteStreamElem = document.createElement('video');
     newRemoteStreamElem.autoplay = true;
@@ -129,9 +130,10 @@
   }
 
   async function addPendingCandidates(sid: number){
+    console.log('addPendingCandidates', peedingCandidates);
     if (peedingCandidates.has(sid)) {
-        peedingCandidates.get(sid)?.forEach(candidate => {
-            peers.get(sid)?.addIceCandidate(new RTCIceCandidate(candidate))
+        peedingCandidates.get(sid)?.forEach(async candidate => {
+            await peers.get(sid)?.addIceCandidate(new RTCIceCandidate(candidate))
         });
     }
   }
@@ -142,15 +144,16 @@
         case 'offer':
             const peer = await createPeerConnection();
             peers.set(sid, peer);
-            peers.get(sid)?.setRemoteDescription(new RTCSessionDescription({
+            await peers.get(sid)?.setRemoteDescription(new RTCSessionDescription({
               type: message.sdpType,
               sdp: message.content,
             }));
-            sendAnswer(sid);
-            addPendingCandidates(sid);
+            await sendAnswer(sid);
+            await addPendingCandidates(sid);
+            console.log('peedingCandidates', peedingCandidates);
             break;
         case 'answer':
-            peers.get(sid)?.setRemoteDescription(new RTCSessionDescription({
+            await peers.get(sid)?.setRemoteDescription(new RTCSessionDescription({
               type: message.sdpType,
               sdp: message.content,
             }));
@@ -159,7 +162,7 @@
             if(message.content){
               const candidate = JSON.parse(message.content);
               if (sid in peers) {
-                  peers.get(sid)?.addIceCandidate(new RTCIceCandidate(candidate));
+                  await peers.get(sid)?.addIceCandidate(new RTCIceCandidate(candidate));
               } else {
                 if (!(sid in peedingCandidates)) {
                   peedingCandidates.set(sid, []);
@@ -366,7 +369,7 @@
     if (!currentContact) return;
     await getLocalStream(true, true);
     peers.set(userId, await createPeerConnection());
-    createOffer(userId);
+    await createOffer(userId);
     addPendingCandidates(userId);
   }
 
