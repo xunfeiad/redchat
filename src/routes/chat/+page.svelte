@@ -85,7 +85,7 @@
     return peer;
   }
 
-  function onAddStream(event: RTCTrackEvent){
+  async function onAddStream(event: RTCTrackEvent){
     console.log('Add stream');
     remoteVideo!.srcObject = event.streams[0];
     await tick();
