@@ -78,25 +78,23 @@
 
   async function createPeerConnection() {
     const peer = new RTCPeerConnection({ iceServers});
-    peer.onicecandidate = onIceCandidate;
-    peer.ontrack = onAddStream;
     const tempUserId = currentContact?.id || remoteUserId;
-    console.log("tempUserId:", tempUserId);
-     // 在连接建立时，处理所有待处理的 ICE 候选
-  if (peedingCandidates.has(tempUserId)) {
-    const candidates = peedingCandidates.get(tempUserId);
-    if (candidates) {
-      for (const candidate of candidates) {
-        try {
-          await peer.addIceCandidate(candidate);
-        } catch (error) {
-          console.error("Error adding pending ICE candidate:", error);
+
+    if(peedingCandidates.has(tempUserId)){
+      const candidates = peedingCandidates.get(tempUserId);
+      if (candidates) {
+        for (const candidate of candidates) {
+          try {
+            await peer.addIceCandidate(candidate);
+          } catch (error) {
+            console.error("Error adding pending ICE candidate:", error);
+          }
         }
       }
-      // 清空已处理的候选
       peedingCandidates.delete(tempUserId);
     }
-  }
+    peer.onicecandidate = onIceCandidate;
+    peer.ontrack = onAddStream;
     peer.oniceconnectionstatechange = () => {
   console.log('ICE connection state:', peer.iceConnectionState);
   switch(peer.iceConnectionState) {
