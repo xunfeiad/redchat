@@ -629,7 +629,6 @@
         <i class="fas fa-microphone"></i>
       </button>
     </div>
-  </div>
 {/if}
 
 <style>
