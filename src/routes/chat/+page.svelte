@@ -104,7 +104,7 @@
       wsClient.send({
         type: "webrtc",
         content: {
-          receiverId: remoteUserId,
+          receiverId: remoteUserId || currentContact?.id,
           senderName: userInfo?.nickname || userInfo?.username || "未知用户",
           senderId: userId,
           content: JSON.stringify(event.candidate),
