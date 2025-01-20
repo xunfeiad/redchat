@@ -71,6 +71,7 @@
       audio,
     });
     localVideo!.srcObject = localStream;
+    await tick();
   }
 
   async function createPeerConnection(){
@@ -86,8 +87,8 @@
 
   function onAddStream(event: RTCTrackEvent){
     console.log('Add stream');
-    remoteVideo!.autoplay = true;
     remoteVideo!.srcObject = event.streams[0];
+    await tick();
   }
 
  function onIceCandidate(event: RTCPeerConnectionIceEvent){
@@ -195,7 +196,8 @@
 
 
   onMount(async () => {
-    console.log(wsClient);
+    localVideo = document.createElement('video');
+    remoteVideo = document.createElement('video');
     userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
     userId = userInfo?.id || 0;
     wsClient.connect();
