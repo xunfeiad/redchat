@@ -28,7 +28,7 @@
   let errorMessage = $state("");
 
   // WebRTC 相关状态
-  let localStream: MediaStream | null = $state(null);  
+  let localStream: MediaStream | null = $state(null);
   const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 
   let peers: Map<number, RTCPeerConnection> = $state(new Map());
@@ -65,7 +65,7 @@
     }
   };
 
-  async function getLocalStream(video: boolean, audio: boolean){
+  async function getLocalStream(video: boolean, audio: boolean) {
     localStream = await navigator.mediaDevices.getUserMedia({
       video,
       audio,
@@ -74,130 +74,145 @@
     await tick();
   }
 
-  async function createPeerConnection(){
-    const peer = new RTCPeerConnection({ iceServers: iceServers });
+  async function createPeerConnection() {
+    const peer = new RTCPeerConnection();
     peer.onicecandidate = onIceCandidate;
     peer.ontrack = onAddStream;
-    localStream?.getTracks().forEach(track => {
-      console.log('track:', track);
+    localStream?.getTracks().forEach((track) => {
+      console.log("track:", track);
       peer.addTrack(track);
     });
+    peer.oniceconnectionstatechange = () => {
+      console.log("ICE connection state:", peer.iceConnectionState);
+      if (peer.iceConnectionState === "connected") {
+        console.log("ICE connection established");
+      } else if (peer.iceConnectionState === "failed") {
+        console.error("ICE connection failed");
+      }
+    };
     return peer;
   }
 
-  async function onAddStream(event: RTCTrackEvent){
-    console.log('Add stream');
+  function onAddStream(event: RTCTrackEvent) {
+    console.log("Add stream");
     remoteVideo!.srcObject = event.streams[0];
-    await tick();
   }
 
- function onIceCandidate(event: RTCPeerConnectionIceEvent){
-    console.log('ICE candidate');
-    console.log('remoteUserId:', remoteUserId);
+  function onIceCandidate(
+    event: RTCPeerConnectionIceEvent,
+  ) {
     if (event.candidate && remoteUserId) {
-          wsClient.send({
-              type: 'webrtc',
-              content: {
-                  receiverId: remoteUserId,
-                  senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-                  senderId: userId,
-                  content: JSON.stringify(event.candidate),
-                  sdpType: "candidate",
-                  sid: userId
-              }
-          });
+      wsClient.send({
+        type: "webrtc",
+        content: {
+          receiverId: remoteUserId,
+          senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+          senderId: userId,
+          content: JSON.stringify(event.candidate),
+          sdpType: "candidate",
+          sid: userId,
+        },
+      });
     }
   }
 
-  async function sendAnswer(message: WebRTCContent){
-    console.log('Send answer', message.senderId);
+  async function sendAnswer(message: WebRTCContent) {
+    console.log("Send answer", message.senderId);
     const answer = await peers.get(message.senderId)?.createAnswer();
-    try{
-      if(answer){
+    try {
+      if (answer) {
         await peers.get(message.senderId)?.setLocalDescription(answer);
         wsClient.send({
-          type: 'webrtc',
+          type: "webrtc",
           content: {
             receiverId: message.senderId,
             senderName: userInfo?.nickname || userInfo?.username || "未知用户",
             senderId: userId,
             content: answer.sdp,
             sdpType: answer.type,
-          }
+          },
         });
       }
-    }catch(error){
-      console.error('Send answer failed: ', error);
+    } catch (error) {
+      console.error("Send answer failed: ", error);
     }
   }
 
-  async function setAndSendLocalDescription(sdp: RTCSessionDescriptionInit, receivedId: number){
+  async function setAndSendLocalDescription(
+    sdp: RTCSessionDescriptionInit,
+    receivedId: number,
+  ) {
     await peers.get(receivedId)?.setLocalDescription(sdp);
-    console.log('Local description set');
+    console.log("Local description set");
     wsClient.send({
-        type: 'webrtc',
-        content: {
-            receiverId: currentContact?.id,
-            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-            senderId: userId,
-            content: sdp.sdp,
-            sdpType: sdp.type,
-        }
+      type: "webrtc",
+      content: {
+        receiverId: currentContact?.id,
+        senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+        senderId: userId,
+        content: sdp.sdp,
+        sdpType: sdp.type,
+      },
     });
   }
 
-  async function addPendingCandidates(senderId: number){
-    console.log('addPendingCandidates', peedingCandidates);
+  async function addPendingCandidates(senderId: number) {
+    console.log("addPendingCandidates", peedingCandidates);
     if (peedingCandidates.has(senderId)) {
-        peedingCandidates.get(senderId)?.forEach(async candidate => {
-            await peers.get(senderId)?.addIceCandidate(new RTCIceCandidate(candidate))
-        });
+      peedingCandidates.get(senderId)?.forEach(async (candidate) => {
+        await peers
+          .get(senderId)
+          ?.addIceCandidate(new RTCIceCandidate(candidate));
+      });
     }
   }
 
-  async function handleSignalingMessage(message: WebRTCContent){
-    console.log('handleSignalingMessage', message);
+  async function handleSignalingMessage(message: WebRTCContent) {
+    console.log("handleSignalingMessage", message);
     remoteUserId = message.senderId;
     switch (message.sdpType) {
-        case 'offer':
-            const peer = await createPeerConnection();
-            peers.set(message.senderId, peer);
-            await peers.get(message.senderId)?.setRemoteDescription(new RTCSessionDescription({
-              type: message.sdpType,
-              sdp: message.content,
-            }));
-            await sendAnswer(message);
-            await addPendingCandidates(message.senderId);
-            console.log('candidates', peedingCandidates);
-            console.log(peers)
-            break;
-        case 'answer':
-            console.log('answer', message.senderId);
-            await peers.get(message.senderId)?.setRemoteDescription(new RTCSessionDescription({
-              type: message.sdpType,
-              sdp: message.content,
-            }));
-            break;
-        case 'candidate':
-            if(message.content){
-              const candidate = JSON.parse(message.content);
-              if (message.senderId in peers) {
-                  await peers.get(message.senderId)?.addIceCandidate(new RTCIceCandidate(candidate));
-              } else {
-                if (!(message.senderId in peedingCandidates)) {
-                  peedingCandidates.set(message.senderId, []);
-                }
-                peedingCandidates.get(message.senderId)?.push(candidate)
+      case "offer":
+        const peer = await createPeerConnection();
+        peers.set(message.senderId, peer);
+        await peers.get(message.senderId)?.setRemoteDescription(
+          new RTCSessionDescription({
+            type: message.sdpType,
+            sdp: message.content,
+          }),
+        );
+        await sendAnswer(message);
+        await addPendingCandidates(message.senderId);
+        console.log("candidates", peedingCandidates);
+        console.log(peers);
+        break;
+      case "answer":
+        console.log("answer", message.senderId);
+        await peers.get(message.senderId)?.setRemoteDescription(
+          new RTCSessionDescription({
+            type: message.sdpType,
+            sdp: message.content,
+          }),
+        );
+        break;
+      case "candidate":
+        if (message.content) {
+          const candidate = JSON.parse(message.content);
+          if (message.senderId in peers) {
+            await peers.get(message.senderId)?.addIceCandidate(candidate);
+          } else {
+            if (!(message.senderId in peedingCandidates)) {
+              peedingCandidates.set(message.senderId, []);
             }
-            break;
+            peedingCandidates.get(message.senderId)?.push(candidate);
+          }
+          break;
+        }
     }
   }
-}
-
 
   onMount(async () => {
-    localVideo = document.createElement('video');
-    remoteVideo = document.createElement('video');
+    localVideo = document.createElement("video");
+    remoteVideo = document.createElement("video");
     userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
     userId = userInfo?.id || 0;
     wsClient.connect();
@@ -378,10 +393,10 @@
       sendMessage();
     }
   }
- 
-  async function createOffer(senderId: number){
+
+  async function createOffer(senderId: number) {
     const offer = await peers.get(senderId)?.createOffer();
-    if(offer){
+    if (offer) {
       await setAndSendLocalDescription(offer, senderId);
     }
   }
@@ -424,7 +439,7 @@
 
   function endCall() {
     localStream?.getTracks().forEach((track) => track.stop());
-    for(const peer of peers.values()){
+    for (const peer of peers.values()) {
       peer?.close();
     }
     localStream = null;
@@ -448,7 +463,7 @@
   onDestroy(() => {
     wsClient.close();
     localStream?.getTracks().forEach((track) => track.stop());
-    for(const peer of peers.values()){
+    for (const peer of peers.values()) {
       peer?.close();
     }
   });
@@ -623,29 +638,25 @@
         </video>
       </div>
     </div>
-    </div>
+  </div>
 
-    <div class="call-controls">
-      <button class="control-btn end" onclick={endCall} aria-label="结束通话">
-        <i class="fas fa-phone-slash"></i>
-      </button>
-      {#if isVideoCall}
-        <button
-          class="control-btn camera"
-          onclick={toggleCamera}
-          aria-label="切换摄像头"
-        >
-          <i class="fas fa-video"></i>
-        </button>
-      {/if}
+  <div class="call-controls">
+    <button class="control-btn end" onclick={endCall} aria-label="结束通话">
+      <i class="fas fa-phone-slash"></i>
+    </button>
+    {#if isVideoCall}
       <button
-        class="control-btn mic"
-        onclick={toggleMic}
-        aria-label="切换麦克风"
+        class="control-btn camera"
+        onclick={toggleCamera}
+        aria-label="切换摄像头"
       >
-        <i class="fas fa-microphone"></i>
+        <i class="fas fa-video"></i>
       </button>
-    </div>
+    {/if}
+    <button class="control-btn mic" onclick={toggleMic} aria-label="切换麦克风">
+      <i class="fas fa-microphone"></i>
+    </button>
+  </div>
 {/if}
 
 <style>
