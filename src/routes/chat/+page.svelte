@@ -143,13 +143,13 @@
     switch (message.sdpType) {
         case 'offer':
             const peer = await createPeerConnection();
-            peers.set(sid, peer);
-            await peers.get(sid)?.setRemoteDescription(new RTCSessionDescription({
+            peers.set(userId, peer);
+            await peers.get(userId)?.setRemoteDescription(new RTCSessionDescription({
               type: message.sdpType,
               sdp: message.content,
             }));
-            await sendAnswer(sid);
-            await addPendingCandidates(sid);
+            await sendAnswer(userId);
+            await addPendingCandidates(userId);
             console.log('peedingCandidates', peedingCandidates);
             break;
         case 'answer':
