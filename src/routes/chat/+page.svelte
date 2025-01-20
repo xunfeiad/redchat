@@ -155,12 +155,12 @@
   }
 
   async function addPendingCandidates(id: number) {
-    console.log("addPendingCandidates", peedingCandidates);
     if (peedingCandidates.has(id)) {
+      console.log("addPendingCandidates", peedingCandidates.get(id));
       peedingCandidates.get(id)?.forEach(async (candidate) => {
         await peers
           .get(id)
-          ?.addIceCandidate(new RTCIceCandidate(candidate));
+          ?.addIceCandidate(candidate);
       });
     }
   }
