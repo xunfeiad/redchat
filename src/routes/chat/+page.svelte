@@ -75,7 +75,7 @@
   }
 
   async function createPeerConnection() {
-    const peer = new RTCPeerConnection();
+    const peer = new RTCPeerConnection({ iceServers: iceServers });
     peer.onicecandidate = onIceCandidate;
     peer.ontrack = onAddStream;
     localStream?.getTracks().forEach((track) => {
