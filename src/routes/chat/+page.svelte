@@ -70,58 +70,55 @@
     });
   }
 
-  async function createPeerConnection() {
+  async function createPeerConnection(){
     const peer = new RTCPeerConnection({ iceServers: iceServers });
-    
-    // 使用箭头函数来保持 this 上下文
-    peer.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
-      console.log('ICE candidate', event.candidate);
-      
-      if (event.candidate && currentContact) {
-        wsClient.send({
-          type: 'webrtc',
-          content: {
-            receiverId: currentContact.id,
-            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
-            senderId: userId,
-            content: JSON.stringify(event.candidate),
-            sdpType: "candidate",
-            sid: userId
-          }
-        });
-      }
-    };
-
-    // 使用箭头函数来保持 this 上下文
-    peer.ontrack = (event: RTCTrackEvent) => {
-      console.log('Add stream', event.streams[0]);
-      if (remoteVideo) {
-        remoteVideo.srcObject = event.streams[0];
-      }
-    };
-
-    // 添加更多事件监听以便调试
-    peer.onconnectionstatechange = () => {
-      console.log('Connection state:', peer.connectionState);
-    };
-
-    peer.oniceconnectionstatechange = () => {
-      console.log('ICE connection state:', peer.iceConnectionState);
-    };
-
-    peer.onsignalingstatechange = () => {
-      console.log('Signaling state:', peer.signalingState);
-    };
-
+    peer.onicecandidate = onIceCandidate;
+    peer.ontrack = onAddStream;
     return peer;
   }
 
-  async function sendAnswer(senderId: number){
-    console.log('Send answer', senderId);
-    const answer = await peers.get(senderId)?.createAnswer();
+ function onIceCandidate(event: RTCPeerConnectionIceEvent){
+    console.log('ICE candidate');
+
+    if (event.candidate) {
+          wsClient.send({
+              type: 'webrtc',
+              content: {
+                  receiverId: currentContact?.id,
+                  senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+                  senderId: userId,
+                  content: JSON.stringify(event.candidate),
+                  sdpType: "candidate",
+                  sid: userId
+              }
+          });
+    }
+  }
+
+  function onAddStream(event: RTCTrackEvent){
+    console.log('Add stream');
+    const newRemoteStreamElem = document.createElement('video');
+    newRemoteStreamElem.autoplay = true;
+    newRemoteStreamElem.srcObject = event.streams[0];
+    remoteVideo = newRemoteStreamElem;
+  }
+
+  async function sendAnswer(message: WebRTCContent){
+    console.log('Send answer', message.senderId);
+    const answer = await peers.get(message.senderId)?.createAnswer();
     try{
       if(answer){
-        await setAndSendLocalDescription(answer, senderId);
+        await peers.get(message.senderId)?.setLocalDescription(answer);
+        wsClient.send({
+          type: 'webrtc',
+          content: {
+            receiverId: message.receiverId,
+            senderName: userInfo?.nickname || userInfo?.username || "未知用户",
+            senderId: userId,
+            content: answer.sdp,
+            sdpType: answer.type,
+          }
+        });
       }
     }catch(error){
       console.error('Send answer failed: ', error);
@@ -129,7 +126,7 @@
   }
 
   async function setAndSendLocalDescription(sdp: RTCSessionDescriptionInit, receivedId: number){
-    peers.get(receivedId)?.setLocalDescription(sdp);
+    await peers.get(receivedId)?.setLocalDescription(sdp);
     console.log('Local description set');
     wsClient.send({
         type: 'webrtc',
@@ -162,7 +159,7 @@
               type: message.sdpType,
               sdp: message.content,
             }));
-            await sendAnswer(message.senderId);
+            await sendAnswer(message);
             await addPendingCandidates(message.senderId);
             break;
         case 'answer':
