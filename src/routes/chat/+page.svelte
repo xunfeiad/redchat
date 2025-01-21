@@ -52,6 +52,8 @@
 
   let remoteUserId: number = $state(0);
 
+  let constant = $state({ video: false, audio: true });
+
   const get_contacts = async () => {
     try {
       let res: Response<Contact[]> = await invoke("get_contacts", {
@@ -65,69 +67,51 @@
     }
   };
 
-  async function getLocalStream(video: boolean, audio: boolean) {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      video,
-      audio,
-    });
+  async function getLocalStream() {
+    localStream = await navigator.mediaDevices.getUserMedia(constant);
     await tick();
     if (localStream) {
-    localVideo!.srcObject = localStream; // 将流绑定到 localVideo 上
-  }
+      localVideo!.srcObject = localStream;
+    }
   }
 
   async function createPeerConnection() {
-    const peer = new RTCPeerConnection({ iceServers});
-    const tempUserId = currentContact?.id || remoteUserId;
-
-    if(peedingCandidates.has(tempUserId)){
-      const candidates = peedingCandidates.get(tempUserId);
-      if (candidates) {
-        for (const candidate of candidates) {
-          try {
-            await peer.addIceCandidate(candidate);
-          } catch (error) {
-            console.error("Error adding pending ICE candidate:", error);
-          }
-        }
-      }
-      peedingCandidates.delete(tempUserId);
-    }
+    const peer = new RTCPeerConnection({ iceServers });
     peer.onicecandidate = onIceCandidate;
     peer.ontrack = onAddStream;
     peer.oniceconnectionstatechange = () => {
-  console.log('ICE connection state:', peer.iceConnectionState);
-  switch(peer.iceConnectionState) {
-    case 'new':
-      console.log('ICE connection is new');
-      break;
-    case 'checking':
-      console.log('ICE connection is checking');
-      break;
-    case 'connected':
-      console.log('ICE connection is connected');
-      break;
-    case 'completed':
-      console.log('ICE connection is completed');
-      break;
-    case 'failed':
-      console.error('ICE connection failed');
-      break;
-    case 'disconnected':
-      console.log('ICE connection disconnected');
-      break;
-    case 'closed':
-      console.log('ICE connection closed');
-      break;
-    default:
-      console.log('ICE connection state unknown');
-  }
-};
-    if(!localStream){
+      console.log("ICE connection state:", peer.iceConnectionState);
+      switch (peer.iceConnectionState) {
+        case "new":
+          console.log("ICE connection is new");
+          break;
+        case "checking":
+          console.log("ICE connection is checking");
+          break;
+        case "connected":
+          console.log("ICE connection is connected");
+          break;
+        case "completed":
+          console.log("ICE connection is completed");
+          break;
+        case "failed":
+          console.error("ICE connection failed");
+          break;
+        case "disconnected":
+          console.log("ICE connection disconnected");
+          break;
+        case "closed":
+          console.log("ICE connection closed");
+          break;
+        default:
+          console.log("ICE connection state unknown");
+      }
+    };
+    if (!localStream) {
       console.log("local stream is null, get local stream");
-      await getLocalStream(true, true);
+      await getLocalStream();
     }
-    if(localStream){
+    if (localStream) {
       localStream?.getTracks().forEach((track) => {
         console.log("track:", track);
         peer.addTrack(track, localStream!);
@@ -138,30 +122,21 @@
 
   async function onAddStream(event: RTCTrackEvent) {
     console.log("Add stream");
-    tick().then(() => {
-      if (remoteVideo) {
-        console.log("remoteVideo:", remoteVideo);
-        remoteVideo!.srcObject = event.streams[0];
-      }
-    });
-    console.log("localVideo:", localVideo);
-    console.log("remoteVideo:", remoteVideo);
-    // remoteVideo!.srcObject = event.streams[0];
+    if (remoteVideo) {
+      remoteVideo!.srcObject = event.streams[0];
+    }
   }
 
-  function onIceCandidate(
-    event: RTCPeerConnectionIceEvent,
-  ) {
+  function onIceCandidate(event: RTCPeerConnectionIceEvent) {
     const sid = currentContact?.id || remoteUserId;
-    if (sid == 0){
+    if (sid == 0) {
       throw new Error("sid is 0");
     }
     if (event.candidate && remoteUserId) {
-      console.log("candidate exchange......", remoteUserId);
       wsClient.send({
         type: "webrtc",
         content: {
-          receiverId: remoteUserId ,
+          receiverId: remoteUserId,
           senderName: userInfo?.nickname || userInfo?.username || "未知用户",
           senderId: userId,
           content: JSON.stringify(event.candidate),
@@ -198,7 +173,6 @@
     id: number,
   ) {
     await peers.get(id)?.setLocalDescription(sdp);
-    console.log("Local description set");
     wsClient.send({
       type: "webrtc",
       content: {
@@ -207,6 +181,7 @@
         senderId: userId,
         content: sdp.sdp,
         sdpType: sdp.type,
+        callType: callType,
       },
     });
   }
@@ -214,50 +189,43 @@
   async function addPendingCandidates(id: number) {
     if (peedingCandidates.has(id)) {
       peedingCandidates.get(id)?.forEach(async (candidate) => {
-        await peers
-          .get(id)
-          ?.addIceCandidate(candidate);
+        await peers.get(id)?.addIceCandidate(candidate);
       });
       console.log("addPendingCandidates", peedingCandidates.get(id));
-
     }
   }
 
   async function handleSignalingMessage(message: WebRTCContent) {
-    console.log("handleSignalingMessage", message);
     remoteUserId = message.senderId;
     switch (message.sdpType) {
       case "offer":
+        if (message.callType === "video") {
+          constant.video = true;
+        } else {
+          constant.video = false;
+        }
         const peer = await createPeerConnection();
         peers.set(remoteUserId, peer);
-        await peers.get(remoteUserId)?.setRemoteDescription(
-          {
-            type: message.sdpType,
-            sdp: message.content,
-          }
-        );
+        await peers.get(remoteUserId)?.setRemoteDescription({
+          type: message.sdpType,
+          sdp: message.content,
+        });
         await sendAnswer(remoteUserId);
         await addPendingCandidates(remoteUserId);
-        console.log(peers);
         break;
       case "answer":
-        console.log("answer", remoteUserId);
-        console.log(peers);
-        await peers.get(remoteUserId)?.setRemoteDescription(
-          {
-            type: message.sdpType,
-            sdp: message.content,
-          }
-        );
+        await peers.get(remoteUserId)?.setRemoteDescription({
+          type: message.sdpType,
+          sdp: message.content,
+        });
         break;
       case "candidate":
         if (message.content) {
           const candidate = JSON.parse(message.content);
-          console.log(":::peer:::----->", peers);
-          if (remoteUserId in peers) {
+          if (peers.has(remoteUserId)) {
             await peers.get(remoteUserId)?.addIceCandidate(candidate);
           } else {
-            if (!(remoteUserId in peedingCandidates)) {
+            if (!peedingCandidates.has(remoteUserId)) {
               peedingCandidates.set(remoteUserId, []);
             }
             peedingCandidates.get(remoteUserId)?.push(candidate);
@@ -268,7 +236,7 @@
   }
 
   onMount(async () => {
-    localVideo = document.createElement("video") ;
+    localVideo = document.createElement("video");
     remoteVideo = document.createElement("video");
     userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}") as UserInfo;
     userId = userInfo?.id || 0;
@@ -323,6 +291,7 @@
             break;
           case "webrtc":
             showIncomingCall = true;
+            callType = (message.content as WebRTCContent).callType || "voice";
             callerName =
               (message.content as WebRTCContent).senderName || "未知用户";
             let audioPlayer = document.getElementById(
@@ -460,7 +429,9 @@
   // 开始视频通话
   async function startVideoCall() {
     if (!currentContact) return;
-    await getLocalStream(true, true);
+    constant.video = true;
+    callType = "video";
+    await getLocalStream();
     peers.set(currentContact.id, await createPeerConnection());
     await createOffer(currentContact.id);
     addPendingCandidates(currentContact.id);
@@ -469,7 +440,8 @@
   // 开始语音通话
   async function startVoiceCall() {
     if (!currentContact) return;
-    await getLocalStream(false, true);
+    constant.video = false;
+    await getLocalStream();
     peers.set(currentContact.id, await createPeerConnection());
     await createOffer(currentContact.id);
     addPendingCandidates(currentContact.id);
